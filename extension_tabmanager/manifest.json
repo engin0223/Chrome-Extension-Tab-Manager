@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Merge Selected Tabs",
-  "version": "1.0",
+  "version": "0.0.1",
   "description": "Lets you right-click on a window and choose which tabs from other windows to merge into it.",
   "permissions": ["tabs", "windows", "storage"],
   "background": {
