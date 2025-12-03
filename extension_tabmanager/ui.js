@@ -1,52 +1,36 @@
 /**
- * Initialize the UI when the DOM content is fully loaded.
- * Loads all windows and tabs, and sets up drag selection handlers.
+ * Main UI initialization for the Tab Manager extension.
+ * Sets up the user interface, loads windows and tabs, and attaches event handlers.
+ * @async
+ * @returns {Promise<void>}
  */
-document.addEventListener('DOMContentLoaded', () => {
-  loadFeatureFlags().then(() => {
-    loadWindowsAndTabs();
-    attachDragSelectionHandlers();
-  });
-});
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Basic UI Setup (Theme, Event Listeners, Buttons)
+  setupUserInterface();
+  
+  // 2. Load Configuration (Feature Flags)
+  // We await this so 'moveTabsEnabled' is updated BEFORE we attach drag handlers
+  await loadFeatureFlags();
 
+  // 3. Load Data and Attach Complex Handlers
+  loadWindowsAndTabs();
+  attachDragSelectionHandlers();
+});
 
 /**
- * Add "New Window" button to the top controls
- * and prevent text selection during drag operations
+ * Sets up the basic user interface elements, including theme, event listeners,
+ * and the "New Window" button. Also handles keyboard shortcuts.
+ * @returns {void}
  */
-document.body.classList.add('user-select-none'); // prevent text selection during drag operations
-const controls = document.getElementById('windowControls');
-const newBtn = document.createElement('button');
-newBtn.className = 'window-tab-new-btn';
-newBtn.innerHTML = '✛';
-newBtn.title = 'New window';
-newBtn.addEventListener('click', async (e) => {
-  e.stopPropagation(); // Prevent card selection when creating new window
-  try {
-    await chrome.windows.create({ state: 'normal' });
-    loadWindowsAndTabs();
-  } catch (error) {
-    console.error('Error creating new window:', error);
-  }
-});
+function setupUserInterface() {
+  // Prevent text selection during drag operations
+  document.body.classList.add('user-select-none'); 
+  
+  // Set Theme
+  document.body.classList.toggle('light-theme', window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+}
 
-controls.insertBefore(newBtn, controls.firstChild);
-
-
-/**
- * Handle keyboard shortcuts for the extension UI.
- * Clears all selections and resets merge mode when Escape is pressed.
- */
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    blueSelection = [];
-    redSelection = [];
-    yellowSelection = [];
-    mergeMode = null;
-    renderWindowContent();
-  }
-});
-
+/** Global state variables */
 let windowsData = [];
 let activeWindowId = null;
 let lastSnapshot = null;
@@ -249,7 +233,50 @@ function renderWindowTabs() {
     
     tabsList.appendChild(tab);
   });
+
   // ensure controls reflect active window
+    // Add "New Window" button
+  const controls = document.getElementById('windowTabsList');
+  if (controls) {
+    const newBtn = document.createElement('button');
+    newBtn.className = 'window-tab-new-btn';
+    newBtn.innerHTML = '✛';
+    newBtn.title = 'New window';
+    newBtn.addEventListener('click', async (e) => {
+      e.stopPropagation(); 
+      try {
+        await chrome.windows.create({ state: 'normal' });
+        loadWindowsAndTabs();
+      } catch (error) {
+        console.error('Error creating new window:', error);
+      }
+    });
+    controls.appendChild(newBtn);
+
+    const themeToggle = document.createElement('button');
+    themeToggle.className = 'window-tab-theme-toggle-btn';
+    themeToggle.innerHTML = '🌓';
+    themeToggle.title = 'Toggle light/dark theme';
+    themeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.body.classList.toggle('light-theme');
+    });
+
+    controls.appendChild(themeToggle);
+  }
+
+  // Handle keyboard shortcuts (Escape key)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      blueSelection = [];
+      redSelection = [];
+      yellowSelection = [];
+      mergeMode = null;
+      renderWindowContent();
+    }
+  });
+
+
 }
 
 /**
