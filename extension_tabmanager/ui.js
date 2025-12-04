@@ -18,18 +18,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /**
- * Sets up the basic user interface elements, including theme, event listeners,
- * and the "New Window" button. Also handles keyboard shortcuts.
- * @returns {void}
- */
+  * Sets up the basic user interface elements, including theme handling
+  * and static control buttons.
+  * @returns {void}
+*/
 function setupUserInterface() {
-  // Prevent text selection during drag operations
   document.body.classList.add('user-select-none'); 
-  
-  // Set Theme
   document.body.classList.toggle('light-theme', window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
-}
 
+  // Setup ONLY the Theme Toggle here (Static, far right)
+  const controlsContainer = document.getElementById('staticControls');
+  if (controlsContainer) {
+    controlsContainer.innerHTML = '';
+
+    // -- Create Theme Toggle Button --
+    const themeToggle = document.createElement('button');
+    themeToggle.className = 'window-tab-theme-toggle-btn';
+    themeToggle.innerHTML = '🌓';
+    themeToggle.title = 'Toggle light/dark theme';
+    themeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.body.classList.toggle('light-theme');
+    });
+
+    controlsContainer.appendChild(themeToggle);
+  }
+}
 /** Global state variables */
 let windowsData = [];
 let activeWindowId = null;
@@ -98,8 +112,17 @@ async function loadWindowsAndTabs() {
     const windows = await chrome.windows.getAll({ populate: true });
     const sorted = windows.sort((a, b) => a.id - b.id);
 
+    const storage = await chrome.storage.local.get({ savedWindowNames: {} });
+    const savedNames = storage.savedWindowNames;
+
+    sorted.forEach(w => {
+      if (savedNames[w.id]) {
+        w.customName = savedNames[w.id];
+      }
+    });
+
     // Create a lightweight snapshot (window id -> ordered tab ids)
-    const snapshot = JSON.stringify(sorted.map(w => ({ id: w.id, tabs: w.tabs.map(t => t.id) })));
+    const snapshot = JSON.stringify(sorted.map(w => ({ id: w.id, tabs: w.tabs.map(t => t.id), customName: w.customName })));
 
     // If nothing changed since last snapshot, avoid re-rendering
     if (lastSnapshot === snapshot) {
@@ -150,95 +173,165 @@ async function refreshUiWindowId() {
   return uiWindowId;
 }
 
+
+/** Saves a custom window name to local storage.
+ * @param {string} name - The custom name to save
+ * @param {number} windowId - The ID of the window
+ * @returns {void}
+*/
+function saveWindowName(name, windowId) {
+  const savedNames = chrome.storage.local.get({ savedWindowNames: {} });
+  savedNames[windowId] = name;
+  chrome.storage.local.set({ savedWindowNames: savedNames });
+}
+
+
 /**
- * Renders the window tabs list on the left sidebar, computing selection state
- * for each window and attaching click/double-click event handlers.
- * Single click switches the active window, ctrl+click toggles all tabs in the window,
- * and double-click selects all tabs in the window.
+ * Renders the sidebar navigation list of browser windows by synchronizing the DOM
+ * with the global `windowsData` state.
+ *
+ * This function performs a DOM reconciliation in three phases:
+ * 1. **Cleanup:** Removes DOM elements for windows that are no longer present in `windowsData`.
+ * 2. **Re-ordering & Update:** Iterates through the data to create new elements or update existing ones.
+ * - Uses `appendChild` on existing elements to sort them visually according to the array order.
+ * - Updates visual state classes (active, selection colors).
+ * - Updates the window title (unless the element is currently focused/being edited).
+ * 3. **Static Elements:** Ensures the "New Window" button is appended at the bottom of the list.
+ *
+ * @global {Array<Object>} windowsData - Array of window objects (Source of Truth).
+ * @global {number|null} activeWindowId - The ID of the currently active window in the extension UI.
+ * @global {Array<number>} redSelection - Collection of tab IDs currently selected in the Red group.
+ * @global {Array<number>} yellowSelection - Collection of tab IDs currently selected in the Yellow group.
+ * @global {Array<number>} blueSelection - Collection of tab IDs currently selected in the Blue group.
+ *
+ * @requires saveWindowName - Helper to persist custom window names on blur.
+ * @requires chrome.windows - Chrome Extension API for creating/removing windows.
+ *
  * @returns {void}
  */
 function renderWindowTabs() {
   const tabsList = document.getElementById('windowTabsList');
-  tabsList.innerHTML = '';
 
+  // --- 1. CLEANUP (Remove closed windows) ---
+  const validWindowIds = new Set(windowsData.map(w => w.id));
+  const existingElements = Array.from(tabsList.children);
+  
+  existingElements.forEach(el => {
+    // Check if this is a window tab (it has a window-id)
+    if (el.dataset.windowId) {
+        const domId = Number(el.dataset.windowId);
+        // If the window ID is no longer valid, remove it
+        if (!validWindowIds.has(domId)) {
+            el.remove();
+        }
+    }
+    // Note: We intentionally IGNORE elements without windowId (like the New Window button)
+    // so they are not removed.
+  });
+
+  // --- 2. RENDER WINDOW TABS (Create or Update) ---
   windowsData.forEach(windowData => {
-    const tab = document.createElement('button');
-    // compute classes based on active state and whether every tab in the window
-    // is selected in a particular color
+    let tab = tabsList.querySelector(`.window-tab[data-window-id="${windowData.id}"]`);
+    let label; 
+
+    // [Block A] Create only if missing
+    if (!tab) {
+      tab = document.createElement('div');
+      tab.dataset.windowId = windowData.id;
+      tab.style.cursor = 'pointer';
+      
+      const icon = document.createElement('span');
+      icon.className = 'window-tab-icon';
+      icon.textContent = '📁';
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'window-tab-close-btn';
+      closeBtn.innerHTML = '✕';
+      closeBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try { await chrome.windows.remove(windowData.id); loadWindowsAndTabs(); } 
+          catch (err) { console.error(err); }
+      });
+
+      label = document.createElement('span');
+      label.className = 'window-tab-label';
+      label.contentEditable = true;
+      label.style.userSelect = 'text'; 
+      label.style.cursor = 'text';
+
+      // Label Listeners
+      label.addEventListener('click', (e) => { e.stopPropagation(); label.focus(); });
+      label.addEventListener('dblclick', (e) => e.stopPropagation());
+      label.addEventListener('mousedown', (e) => e.stopPropagation());
+      label.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
+      });
+      label.addEventListener('blur', () => {
+        const newName = label.textContent.trim();
+        if (newName !== windowData.customName) {
+            windowData.customName = newName;
+            saveWindowName(newName, windowData.id); 
+        }
+      });
+
+      // Tab Listeners
+      tab.addEventListener('click', (e) => {
+        if (document.activeElement === label) return; 
+        if (e.ctrlKey || e.metaKey) {
+            toggleAllTabsInWindow(windowData.id);
+        } else {
+            activeWindowId = windowData.id;
+        }
+        renderWindowTabs();
+        renderWindowContent();
+      });
+
+      tab.addEventListener('dblclick', () => {
+        if (document.activeElement === label) return;
+        activeWindowId = windowData.id;
+        selectAllTabsInWindow(windowData.id);
+        renderWindowTabs();
+        renderWindowContent();
+      });
+
+      tab.appendChild(icon);
+      tab.appendChild(label);
+      tab.appendChild(closeBtn);
+      
+      tabsList.appendChild(tab);
+    } else {
+      label = tab.querySelector('.window-tab-label');
+      // Re-append existing tab to ensure it is in the correct sort order
+      tabsList.appendChild(tab);
+    }
+
+    // [Block B] Always Update Dynamic Classes/Text
     const classes = ['window-tab'];
     if (windowData.id === activeWindowId) classes.push('active');
+    
     const tabIds = windowData.tabs.map(t => t.id);
     if (tabIds.length > 0) {
-      if (tabIds.every(id => redSelection.includes(id))) {
-        classes.push('selected-red');
-      } else if (tabIds.every(id => yellowSelection.includes(id))) {
-        classes.push('selected-yellow');
-      } else if (tabIds.every(id => blueSelection.includes(id))) {
-        classes.push('selected-blue');
-      }
+      if (tabIds.every(id => redSelection.includes(id))) classes.push('selected-red');
+      else if (tabIds.every(id => yellowSelection.includes(id))) classes.push('selected-yellow');
+      else if (tabIds.every(id => blueSelection.includes(id))) classes.push('selected-blue');
     }
     tab.className = classes.join(' ');
 
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'window-tab-close-btn';
-
-    closeBtn.innerHTML = '✕';
-    closeBtn.title = 'Close window';
-    closeBtn.addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent card selection when closing
-      try {
-        await chrome.windows.remove(windowData.id);
-        loadWindowsAndTabs();
-      } catch (error) {
-        console.error('Error closing window:', error);
-      }
-    });
-
-
-    const icon = document.createElement('span');
-    icon.className = 'window-tab-icon';
-    icon.textContent = '📁';
-    
-    const label = document.createElement('span');
-    label.className = 'window-tab-label';
-    label.textContent = `Window ${windowData.id} (${windowData.tabs.length})`;
-    
-    tab.appendChild(icon);
-    tab.appendChild(label);
-    tab.appendChild(closeBtn);
-    // expose window id for drag hover detection
-    tab.dataset.windowId = windowData.id;
-    
-    let clickTimer = null;
-
-    tab.addEventListener('click', (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        toggleAllTabsInWindow(windowData.id);
-        // ensure UI updates to reflect the new selection state
-        renderWindowTabs();
-        renderWindowContent();
-      } else {
-        activeWindowId = windowData.id;
-        renderWindowTabs();
-        renderWindowContent();
-      }
-    });
-
-    tab.addEventListener('dblclick', () => {
-      activeWindowId = windowData.id;
-      selectAllTabsInWindow(windowData.id);
-      renderWindowTabs();
-      renderWindowContent();
-    });
-    
-    tabsList.appendChild(tab);
+    console.log(windowData.customName);
+    const currentCorrectName = windowData.customName || `Window ${windowData.id} (${windowData.tabs.length})`;
+    if (label.textContent !== currentCorrectName && document.activeElement !== label) {
+        label.textContent = currentCorrectName;
+    }
   });
 
-  // ensure controls reflect active window
-    // Add "New Window" button
-  const controls = document.getElementById('windowTabsList');
-  if (controls) {
-    const newBtn = document.createElement('button');
+  // --- 3. HANDLE NEW WINDOW BUTTON (Append at the end) ---
+  // We check if it exists in the list. If not, create it.
+  // Then we appendChild it, which moves it to the very end of the list.
+  let newBtn = document.getElementById('newWindowBtn');
+  
+  if (!newBtn) {
+    newBtn = document.createElement('button');
+    newBtn.id = 'newWindowBtn'; // ID ensures we can find it next time
     newBtn.className = 'window-tab-new-btn';
     newBtn.innerHTML = '✛';
     newBtn.title = 'New window';
@@ -247,36 +340,13 @@ function renderWindowTabs() {
       try {
         await chrome.windows.create({ state: 'normal' });
         loadWindowsAndTabs();
-      } catch (error) {
-        console.error('Error creating new window:', error);
-      }
+      } catch (error) { console.error(error); }
     });
-    controls.appendChild(newBtn);
-
-    const themeToggle = document.createElement('button');
-    themeToggle.className = 'window-tab-theme-toggle-btn';
-    themeToggle.innerHTML = '🌓';
-    themeToggle.title = 'Toggle light/dark theme';
-    themeToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      document.body.classList.toggle('light-theme');
-    });
-
-    controls.appendChild(themeToggle);
+    tabsList.appendChild(newBtn);
+  } else {
+    // If it exists, just move it to the end
+    tabsList.appendChild(newBtn);
   }
-
-  // Handle keyboard shortcuts (Escape key)
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      blueSelection = [];
-      redSelection = [];
-      yellowSelection = [];
-      mergeMode = null;
-      renderWindowContent();
-    }
-  });
-
-
 }
 
 /**
@@ -717,6 +787,11 @@ function attachDragSelectionHandlers() {
     if (e.button !== 0) return; // left button only
     // don't start drag when clicking on controls inside cards
     if (e.target.closest('.page-card-close-btn')) return;
+
+    if (document.activeElement && document.activeElement.isContentEditable) {
+        document.activeElement.blur(); 
+        console.log(document.activeElement);
+    }
 
     const clickedCard = e.target.closest('.page-card');
     if (clickedCard) {
