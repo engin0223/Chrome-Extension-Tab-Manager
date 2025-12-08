@@ -196,10 +196,13 @@ async function refreshUiWindowId() {
  * @param {number} windowId - The ID of the window
  * @returns {void}
 */
-function saveWindowName(name, windowId) {
-  const savedNames = chrome.storage.local.get({ savedWindowNames: {} });
-  savedNames[windowId] = name;
-  chrome.storage.local.set({ savedWindowNames: savedNames });
+async function saveWindowName(name, windowId) {
+  const storageObject = await chrome.storage.local.get({ savedWindowNames: {} });
+  const windowNamesMap = storageObject.savedWindowNames;
+
+  windowNamesMap[windowId] = name;
+
+  await chrome.storage.local.set({ savedWindowNames: windowNamesMap });
 }
 
 
@@ -226,7 +229,7 @@ function saveWindowName(name, windowId) {
  *
  * @returns {void}
  */
-function renderWindowTabs() {
+async function renderWindowTabs() {
   const tabsList = document.getElementById('windowTabsList');
 
   // --- 1. CLEANUP (Remove closed windows) ---
@@ -246,8 +249,12 @@ function renderWindowTabs() {
     // so they are not removed.
   });
 
+  const storageObject = await chrome.storage.local.get({savedWindowNames: {}});
+  let savedNames = storageObject.savedWindowNames;
+
+
   // --- 2. RENDER WINDOW TABS (Create or Update) ---
-  windowsData.forEach(windowData => {
+  windowsData.forEach(async windowData => {
     let tab = tabsList.querySelector(`.window-tab[data-window-id="${windowData.id}"]`);
     let label; 
 
@@ -273,6 +280,18 @@ function renderWindowTabs() {
       label = document.createElement('span');
       label.className = 'window-tab-label';
       label.contentEditable = true;
+      
+      console.log(savedNames[windowData.id]);
+      if (savedNames[windowData.id] === undefined) {
+        console.log('setting default name for window', windowData.id); 
+        console.log('saved name:', savedNames[windowData.id]);
+        label.textContent = `Window ${windowData.id} (${windowData.tabs.length})`;
+        saveWindowName(label.textContent, windowData.id);
+      } else {
+        label.textContent = savedNames[windowData.id];
+      }
+      
+
       label.style.userSelect = 'text'; 
       label.style.cursor = 'text';
 
@@ -283,12 +302,10 @@ function renderWindowTabs() {
       label.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
       });
-      label.addEventListener('blur', () => {
+      label.addEventListener('blur', async () => {
         const newName = label.textContent.trim();
-        if (newName !== windowData.customName) {
-            windowData.customName = newName;
-            saveWindowName(newName, windowData.id); 
-        }
+        label.textContent = newName;
+        saveWindowName(newName, windowData.id);
       });
 
       // Tab Listeners
@@ -334,11 +351,6 @@ function renderWindowTabs() {
     }
     tab.className = classes.join(' ');
 
-    console.log(windowData.customName);
-    const currentCorrectName = windowData.customName || `Window ${windowData.id} (${windowData.tabs.length})`;
-    if (label.textContent !== currentCorrectName && document.activeElement !== label) {
-        label.textContent = currentCorrectName;
-    }
   });
 
   // --- 3. HANDLE NEW WINDOW BUTTON (Append at the end) ---
@@ -809,8 +821,6 @@ function attachDragSelectionHandlers() {
         document.activeElement.blur(); 
         console.log(document.activeElement);
     }
-
-    renderWindowTabs();
 
     const clickedCard = e.target.closest('.page-card');
     if (clickedCard) {
