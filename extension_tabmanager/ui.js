@@ -25,6 +25,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setupUserInterface() {
   document.body.classList.add('user-select-none'); 
   document.body.classList.toggle('light-theme', window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+  document.body.addEventListener('keydown', (event) => {
+    // Check if the pressed key's 'key' property is 'Escape'
+    if (event.key === 'Escape') { 
+      // Clear all selections and reset merge mode
+      blueSelection = [];
+      redSelection = [];
+      yellowSelection = [];
+      mergeMode = null;
+      renderWindowContent();
+      console.log('Escape key pressed - selections cleared');
+
+      // Optional: Prevent any default browser action for the Escape key 
+      // (like closing a dialog if one is natively open).
+      // event.preventDefault(); 
+    }
+  });
+
 
   // Setup ONLY the Theme Toggle here (Static, far right)
   const controlsContainer = document.getElementById('staticControls');
@@ -727,14 +744,14 @@ function selectAllTabsInWindow(windowId) {
  * @param {number} windowId - The window ID whose tabs should be toggled
  * @returns {void}
  */
-function toggleAllTabsInWindow(windowId) {
+async function toggleAllTabsInWindow(windowId) {
   const window = windowsData.find(w => w.id === windowId);
   if (!window) return;
 
   const tabIds = window.tabs.map(t => t.id);
 
   // Check if all tabs for this window are already selected
-  const allSelected = tabIds.every(id => blueSelection.includes(id));
+  const allSelected = await tabIds.every(id => blueSelection.includes(id));
 
   if (allSelected) {
     // Remove all of the window's tabs from blueSelection
@@ -792,6 +809,8 @@ function attachDragSelectionHandlers() {
         document.activeElement.blur(); 
         console.log(document.activeElement);
     }
+
+    renderWindowTabs();
 
     const clickedCard = e.target.closest('.page-card');
     if (clickedCard) {
