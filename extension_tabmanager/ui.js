@@ -279,7 +279,6 @@ async function renderWindowTabs() {
 
       label = document.createElement('span');
       label.className = 'window-tab-label';
-      label.contentEditable = true;
       
       console.log(savedNames[windowData.id]);
       if (savedNames[windowData.id] === undefined) {
@@ -290,17 +289,16 @@ async function renderWindowTabs() {
       } else {
         label.textContent = savedNames[windowData.id];
       }
-      
+
 
       label.style.userSelect = 'text'; 
       label.style.cursor = 'text';
 
       // Label Listeners
-      label.addEventListener('click', (e) => { e.stopPropagation(); label.focus(); });
-      label.addEventListener('dblclick', (e) => e.stopPropagation());
       label.addEventListener('mousedown', (e) => e.stopPropagation());
       label.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
+        if (e.ctrlKey) {e.preventDefault();}
       });
       label.addEventListener('blur', async () => {
         const newName = label.textContent.trim();
@@ -310,19 +308,24 @@ async function renderWindowTabs() {
 
       // Tab Listeners
       tab.addEventListener('click', (e) => {
-        if (document.activeElement === label) return; 
         if (e.ctrlKey || e.metaKey) {
             toggleAllTabsInWindow(windowData.id);
+            renderWindowTabs();
+            renderWindowContent();
         } else {
-            activeWindowId = windowData.id;
+            if (activeWindowId != windowData.id){
+              let oldtab = tabsList.querySelector(`.window-tab[data-window-id="${activeWindowId}"]`);
+              oldtab.children[1].contentEditable = false;
+              activeWindowId = windowData.id;
+              label.contentEditable = true;
+              renderWindowTabs();
+              renderWindowContent();
+            }
         }
-        renderWindowTabs();
-        renderWindowContent();
       });
 
       tab.addEventListener('dblclick', () => {
         if (document.activeElement === label) return;
-        activeWindowId = windowData.id;
         selectAllTabsInWindow(windowData.id);
         renderWindowTabs();
         renderWindowContent();
