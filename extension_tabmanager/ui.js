@@ -294,6 +294,10 @@ async function renderWindowTabs() {
       label.style.userSelect = 'text'; 
       label.style.cursor = 'text';
 
+      if (activeWindowId == windowData.id && !label.isContentEditable) {
+        label.contentEditable = true;
+      }
+
       // Label Listeners
       label.addEventListener('mousedown', (e) => e.stopPropagation());
       label.addEventListener('keydown', (e) => {
