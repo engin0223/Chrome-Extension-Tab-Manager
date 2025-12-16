@@ -40,6 +40,20 @@ function setupUserInterface() {
       // (like closing a dialog if one is natively open).
       // event.preventDefault(); 
     }
+
+    if (event.key === 'Delete' && blueSelection.length) {
+      const tabIdsToRemove = [...blueSelection];
+      blueSelection = [];
+      try { 
+        chrome.tabs.remove(tabIdsToRemove, () => {
+          loadWindowsAndTabs();
+        });
+      } catch (err) { 
+        console.error('Error closing tabs:', err);
+      }
+      event.preventDefault(); 
+    }
+    
   });
 
 
