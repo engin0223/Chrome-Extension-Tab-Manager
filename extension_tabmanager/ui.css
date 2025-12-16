@@ -180,6 +180,29 @@ body {
   height: 35px;
   flex-shrink: 0;
   transition: background 0.3s;
+/* Search Box - Matches theme colors */
+.search-box {
+  background: var(--bg-element-interactive); /* Matches inactive tabs/buttons */
+  border: 1px solid var(--border-light);     /* Subtle border */
+  color: var(--text-primary);                /* Standard text color */
+  padding: 6px 8px;
+  border-radius: 4px;                        /* Matches control-btn radius */
+  font-size: 12px;
+  width: 180px;                              /* Adjust width as needed */
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+/* Focus State - Highlights with your primary blue accent */
+.search-box:focus {
+  background: var(--bg-element-hover);       /* Slightly lighter on focus */
+  border-color: var(--accent-blue);          /* Blue border highlight */
+  color: var(--text-bright);                 /* Brighter text on focus */
+}
+
+/* Placeholder Text */
+.search-box::placeholder {
+  color: var(--text-muted);                  /* Dimmed text for placeholder */
+  opacity: 1;
 }
 
 

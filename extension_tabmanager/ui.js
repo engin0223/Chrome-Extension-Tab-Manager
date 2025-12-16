@@ -28,6 +28,11 @@ function setupUserInterface() {
   document.body.addEventListener('keydown', (event) => {
     // Check if the pressed key's 'key' property is 'Escape'
     if (event.key === 'Escape') { 
+      // --- Force any focused element (like Search or Window Title) to blur ---
+      if (document.activeElement && document.activeElement !== document.body) {
+        document.activeElement.blur();
+      }
+
       // Clear all selections and reset merge mode
       blueSelection = [];
       redSelection = [];
@@ -35,10 +40,6 @@ function setupUserInterface() {
       mergeMode = null;
       renderWindowContent();
       console.log('Escape key pressed - selections cleared');
-
-      // Optional: Prevent any default browser action for the Escape key 
-      // (like closing a dialog if one is natively open).
-      // event.preventDefault(); 
     }
 
     if (event.key === 'Delete' && blueSelection.length) {
@@ -54,6 +55,22 @@ function setupUserInterface() {
       event.preventDefault(); 
     }
     
+  });
+
+  // Add listener in setupUserInterface()
+  document.getElementById('tabSearchInput').addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase();
+    const cards = document.querySelectorAll('.page-card');
+    cards.forEach(card => {
+      const title = card.querySelector('.page-card-title').textContent.toLowerCase();
+      const url = card.querySelector('.page-url').textContent.toLowerCase();
+      // Toggle visibility based on match
+      if (title.includes(term) || url.includes(term)) {
+        card.style.display = 'flex';
+      } else {
+        card.style.display = 'none';
+      }
+    });
   });
 
 
@@ -838,9 +855,15 @@ function attachDragSelectionHandlers() {
     // don't start drag when clicking on controls inside cards
     if (e.target.closest('.page-card-close-btn')) return;
 
-    if (document.activeElement && document.activeElement.isContentEditable) {
+    if (document.activeElement) {
+        const tagName = document.activeElement.tagName;
+        const isInput = tagName === 'INPUT' || tagName === 'TEXTAREA';
+        const isEditable = document.activeElement.isContentEditable;
+
+        // Force it to lose focus
+        if (isInput || isEditable) {
         document.activeElement.blur(); 
-        console.log(document.activeElement);
+        }
     }
 
     const clickedCard = e.target.closest('.page-card');
