@@ -180,6 +180,8 @@ body {
   height: 35px;
   flex-shrink: 0;
   transition: background 0.3s;
+}
+
 /* Search Box - Matches theme colors */
 .search-box {
   background: var(--bg-element-interactive); /* Matches inactive tabs/buttons */
