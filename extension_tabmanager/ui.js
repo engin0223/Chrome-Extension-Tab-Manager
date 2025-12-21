@@ -626,8 +626,24 @@ function renderWindowContent() {
   contentArea.innerHTML = '';
   contentArea.classList.add('active');
 
+  // Get current filter term
+  const searchInput = document.getElementById('tabSearchInput');
+  const filterTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
   currentWindow.tabs.forEach(tab => {
     const card = createPageCard(tab, currentWindow.id);
+    
+    // Apply filter if one exists
+    if (filterTerm) {
+      const title = (tab.title || 'Untitled').toLowerCase();
+      const url = (tab.url || 'about:blank').toLowerCase();
+      
+      // Hide card if it doesn't match the search term
+      if (!title.includes(filterTerm) && !url.includes(filterTerm)) {
+        card.style.display = 'none';
+      }
+    }
+
     contentArea.appendChild(card);
   });
 
