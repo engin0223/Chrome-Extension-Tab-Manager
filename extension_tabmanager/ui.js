@@ -7,6 +7,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
   // 1. Basic UI Setup (Theme, Event Listeners, Buttons)
   setupUserInterface();
+  setupSearchFilter()
   
   // 2. Load Configuration (Feature Flags)
   // We await this so 'moveTabsEnabled' is updated BEFORE we attach drag handlers
@@ -190,11 +191,96 @@ async function loadWindowsAndTabs() {
       activeWindowId = windowsData[0].id;
     }
 
+    if (searchTargetWindowIds.size === 0 && activeWindowId) {
+      searchTargetWindowIds.add(activeWindowId);
+    }
+
     renderWindowTabs();
     renderWindowContent();
     attachTopControls();
   } catch (error) {
     console.error('Error loading windows:', error);
+  }
+}
+
+
+/**
+ * Sets up the search filter button and menu for selecting which windows to include in search.
+ * @returns {void}
+ */
+function setupSearchFilter() {
+  const btn = document.getElementById('searchFilterBtn');
+  const menu = document.getElementById('searchFilterMenu');
+  const list = document.getElementById('filterWindowList');
+  const selectAll = document.getElementById('filterSelectAll');
+  const selectNone = document.getElementById('filterSelectNone');
+  const searchInput = document.getElementById('tabSearchInput');
+
+  // Toggle Menu Visibility
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    renderFilterOptions(); // Refresh list before showing
+    menu.classList.toggle('visible');
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && e.target !== btn) {
+      menu.classList.remove('visible');
+    }
+  });
+
+  // Select All
+  selectAll.addEventListener('click', () => {
+    windowsData.forEach(w => searchTargetWindowIds.add(w.id));
+    renderFilterOptions();
+    renderWindowContent(); // Trigger search update
+  });
+
+  // Select None (Revert to just active window or empty)
+  selectNone.addEventListener('click', () => {
+    searchTargetWindowIds.clear();
+    renderFilterOptions();
+    renderWindowContent();
+  });
+
+  // Search Input Listener
+  searchInput.addEventListener('input', () => {
+    renderWindowContent();
+  });
+
+  // Helper to render the checkboxes inside the popup
+  function renderFilterOptions() {
+    list.innerHTML = '';
+    windowsData.forEach(win => {
+      const row = document.createElement('label');
+      row.className = 'filter-option';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = searchTargetWindowIds.has(win.id);
+      
+      // Determine name (Custom name or Window ID)
+      const winName = win.customName || `Window ${win.id}`;
+      const count = win.tabs.length;
+      
+      const span = document.createElement('span');
+      span.textContent = `${winName} (${count} tabs)`;
+      
+      checkbox.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          searchTargetWindowIds.add(win.id);
+        } else {
+          searchTargetWindowIds.delete(win.id);
+        }
+        // Live update the search results
+        renderWindowContent();
+      });
+
+      row.appendChild(checkbox);
+      row.appendChild(span);
+      list.appendChild(row);
+    });
   }
 }
 
@@ -606,63 +692,73 @@ async function splitCurrentWindow(windowId, option = 'others-to-new') {
 }
 
 /**
- * Renders the main content area with all tabs from the active window.
- * Creates page cards for each tab and updates the window tabs sidebar to reflect current selections.
- * Shows an empty state if the active window has no tabs.
+  * Renders the main content area showing tabs from selected windows,
+  * applying the current search filter.
  * @returns {void}
  */
 function renderWindowContent() {
   const contentArea = document.getElementById('windowContent');
-  const currentWindow = windowsData.find(w => w.id === activeWindowId);
-  
-  if (!currentWindow || currentWindow.tabs.length === 0) {
-    contentArea.innerHTML = '<div class="empty-state">No tabs in this window</div>';
-    contentArea.classList.remove('active');
-    // keep window tabs in sync when content is empty
-    renderWindowTabs();
-    return;
-  }
+  const searchInput = document.getElementById('tabSearchInput');
+  const filterTerm = searchInput ? searchInput.value.toLowerCase() : '';
 
   contentArea.innerHTML = '';
   contentArea.classList.add('active');
 
-  // Get current filter term
-  const searchInput = document.getElementById('tabSearchInput');
-  const filterTerm = searchInput ? searchInput.value.toLowerCase() : '';
-
-  currentWindow.tabs.forEach(tab => {
-    const card = createPageCard(tab, currentWindow.id);
-    
-    // Apply filter if one exists
-    if (filterTerm) {
+  // 1. Gather all tabs from the SELECTED windows
+  let tabsToRender = [];
+  
+  // If no windows selected, maybe show empty or default to active?
+  // Let's assume user wants to see nothing if they unchecked everything.
+  
+  windowsData.forEach(win => {
+    // Only process this window if it is in our "Checked" set
+    if (searchTargetWindowIds.has(win.id)) {
+      win.tabs.forEach(tab => {
       const title = (tab.title || 'Untitled').toLowerCase();
       const url = (tab.url || 'about:blank').toLowerCase();
       
-      // Hide card if it doesn't match the search term
-      if (!title.includes(filterTerm) && !url.includes(filterTerm)) {
-        card.style.display = 'none';
-      }
+        // Filter match? (If empty string, it matches everything)
+        if (filterTerm === '' || title.includes(filterTerm) || url.includes(filterTerm)) {
+          tabsToRender.push({
+            tab: tab,
+            windowId: win.id,
+            windowName: win.customName || `Window ${win.id}`
+          });
+        }
+      });
+    }
+  });
+
+  if (tabsToRender.length === 0 && filterTerm !== '') {
+    contentArea.innerHTML = '<div class="empty-state">No matching tabs found</div>';
+    return;
     }
 
+  // 2. Render Cards
+  tabsToRender.forEach(item => {
+    // We pass the Window Name so createPageCard can display a badge
+    const card = createPageCard(item.tab, item.windowId, item.windowName);
     contentArea.appendChild(card);
   });
 
-  // ensure the window tabs bar updates highlights to reflect current selections
+  // Ensure the sidebar still highlights the "Main" active window correctly
   renderWindowTabs();
 }
 
 /**
  * Creates a DOM element representing a single tab (page card) with favicon, title, URL, and close button.
  * Attaches click handlers for selection and drag-to-select functionality.
+ * Displays a window badge if applicable.
  * @param {Object} tab - The tab object from Chrome's tabs API
  * @param {number} tab.id - The unique tab ID
  * @param {string} tab.title - The page title
  * @param {string} tab.url - The page URL
  * @param {string} [tab.favIconUrl] - The favicon URL
  * @param {number} windowId - The window ID this tab belongs to
+ * @param {string} windowName - The custom name of the window this tab belongs to
  * @returns {HTMLElement} The created page card DOM element
  */
-function createPageCard(tab, windowId) {
+function createPageCard(tab, windowId, windowName) {
   const card = document.createElement('div');
   card.className = 'page-card';
   card.dataset.tabId = tab.id;
@@ -670,6 +766,22 @@ function createPageCard(tab, windowId) {
 
   const header = document.createElement('div');
   header.className = 'page-card-header';
+
+  if (windowName && (searchTargetWindowIds.size > 1 || windowId !== activeWindowId)) {
+    const badge = document.createElement('span');
+    badge.textContent = windowName;
+    badge.style.fontSize = '10px';
+    badge.style.background = 'var(--bg-element-interactive)';
+    badge.style.padding = '2px 5px';
+    badge.style.borderRadius = '3px';
+    badge.style.marginRight = '6px';
+    badge.style.color = 'var(--text-muted)';
+    badge.style.whiteSpace = 'nowrap';
+    badge.style.maxWidth = '80px';
+    badge.style.overflow = 'hidden';
+    badge.style.textOverflow = 'ellipsis';
+    header.appendChild(badge);
+  }
 
   // Favicon
   const favicon = document.createElement('img');

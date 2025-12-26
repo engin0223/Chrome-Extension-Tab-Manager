@@ -208,6 +208,95 @@ body {
 }
 
 
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+
+.filter-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 220px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 2000;
+  padding: 8px 0;
+  margin-top: 6px;
+  display: none; 
+}
+
+.filter-menu.visible {
+  display: block;
+}
+
+
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 12px 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 4px;
+}
+
+.filter-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+.text-btn:hover { text-decoration: underline; }
+
+
+.filter-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.filter-option:hover {
+  background: var(--bg-element-hover);
+}
+
+.filter-option input[type="checkbox"] {
+  margin-right: 8px;
+  accent-color: var(--accent-blue);
+}
+
+
+.icon-btn {
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  width: 28px; 
+  padding: 0;
+}
+
+
 .window-tabs-list {
   display: flex;
   gap: 2px;
