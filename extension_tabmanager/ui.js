@@ -174,10 +174,9 @@ async function loadWindowsAndTabs() {
     const snapshot = JSON.stringify(sorted.map(w => ({ id: w.id, tabs: w.tabs.map(t => t.id), customName: w.customName })));
 
     // If nothing changed since last snapshot, avoid re-rendering
-    if (lastSnapshot === snapshot) {
-      return; // no changes
-    }
+    if (lastSnapshot !== snapshot) {
     lastSnapshot = snapshot;
+    }
 
     windowsData = sorted;
     
@@ -438,6 +437,7 @@ async function renderWindowTabs() {
               let oldtab = tabsList.querySelector(`.window-tab[data-window-id="${activeWindowId}"]`);
               oldtab.children[1].contentEditable = false;
               activeWindowId = windowData.id;
+              searchTargetWindowIds = new Set([activeWindowId]);
               label.contentEditable = true;
               renderWindowTabs();
               renderWindowContent();
@@ -766,6 +766,12 @@ function createPageCard(tab, windowId, windowName) {
 
   const header = document.createElement('div');
   header.className = 'page-card-header';
+
+  const existingIds = new Set(windowsData.map(win => win.id));
+
+  searchTargetWindowIds = new Set(
+    [...searchTargetWindowIds].filter(id => existingIds.has(id))
+  );
 
   if (windowName && (searchTargetWindowIds.size > 1 || windowId !== activeWindowId)) {
     const badge = document.createElement('span');
