@@ -185,12 +185,24 @@ async function loadWindowsAndTabs() {
       return;
     }
 
-    // Set active window to first one if not set
-    if (!activeWindowId) {
-      activeWindowId = windowsData[0].id;
+    const validWindowIds = new Set(windowsData.map(w => w.id));
+
+    // Clean up searchTargetWindowIds to remove any closed windows
+    for (const id of searchTargetWindowIds) {
+      if (!validWindowIds.has(id)) {
+        searchTargetWindowIds.delete(id);
+      }
     }
 
-    if (searchTargetWindowIds.size === 0 && activeWindowId) {
+    // Ensure activeWindowId is valid
+    if (!activeWindowId || !validWindowIds.has(activeWindowId)) {
+      // Automatically choose the last window in the list as active
+      const lastWindow = windowsData[windowsData.length - 1];
+      activeWindowId = lastWindow.id;
+    }
+
+    // Ensure activeWindowId is in searchTargetWindowIds
+    if (!searchTargetWindowIds.has(activeWindowId)) {
       searchTargetWindowIds.add(activeWindowId);
     }
 
