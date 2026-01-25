@@ -1357,6 +1357,54 @@ chrome.windows.onRemoved.addListener(() => {
   loadWindowsAndTabs();
 });
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  // Check if any visible property (URL, Title, Favicon) has changed
+  if (changeInfo.url || changeInfo.title || changeInfo.favIconUrl) {
+    
+    // 1. Update the internal data model
+    for (const win of windowsData) {
+      const storedTab = win.tabs.find(t => t.id === tabId);
+      if (storedTab) {
+        storedTab.url = tab.url;
+        storedTab.title = tab.title;
+        storedTab.favIconUrl = tab.favIconUrl;
+        break;
+      }
+    }
+
+    // 2. If a search is active, re-render the whole list to ensure correct filtering
+    const searchInput = document.getElementById('tabSearchInput');
+    if (searchInput && searchInput.value) {
+      renderWindowContent();
+      return;
+    }
+
+    // 3. Otherwise, update the specific card DOM element directly
+    const card = document.querySelector(`.page-card[data-tab-id="${tabId}"]`);
+    if (card) {
+      // Update Title
+      const titleEl = card.querySelector('.page-card-title');
+      if (titleEl) {
+        titleEl.textContent = tab.title || 'Untitled';
+        titleEl.title = tab.title || '';
+      }
+
+      // Update URL
+      const urlEl = card.querySelector('.page-url');
+      if (urlEl) {
+        urlEl.textContent = tab.url || 'about:blank';
+        urlEl.title = tab.url || '';
+      }
+
+      // Update Favicon
+      const favEl = card.querySelector('.page-card-favicon');
+      if (favEl) {
+        favEl.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
+      }
+    }
+  }
+});
+
 // Refresh every 2 seconds to show updated data
 // Removed polling: UI updates are driven by tab/window events and snapshot diffs
 
