@@ -804,7 +804,15 @@ function createPageCard(tab, windowId, windowName) {
   // Favicon
   const favicon = document.createElement('img');
   favicon.className = 'page-card-favicon';
-  favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
+  if (tab.url) {
+    const url = new URL(chrome.runtime.getURL('/_favicon/'));
+    url.searchParams.set('pageUrl', tab.url);
+    url.searchParams.set('size', '128');
+    favicon.src = url.toString();
+  } else {
+    // Fallback if no URL exists
+    favicon.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
+  }
   favicon.onerror = () => {
     favicon.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
   };
