@@ -175,7 +175,7 @@ async function loadWindowsAndTabs() {
 
     // If nothing changed since last snapshot, avoid re-rendering
     if (lastSnapshot !== snapshot) {
-    lastSnapshot = snapshot;
+      lastSnapshot = snapshot;
     }
 
     windowsData = sorted;
@@ -706,7 +706,7 @@ async function splitCurrentWindow(windowId, option = 'others-to-new') {
 /**
   * Renders the main content area showing tabs from selected windows,
   * applying the current search filter.
- * @returns {void}
+  * @returns {void}
  */
 function renderWindowContent() {
   const contentArea = document.getElementById('windowContent');
@@ -726,8 +726,8 @@ function renderWindowContent() {
     // Only process this window if it is in our "Checked" set
     if (searchTargetWindowIds.has(win.id)) {
       win.tabs.forEach(tab => {
-      const title = (tab.title || 'Untitled').toLowerCase();
-      const url = (tab.url || 'about:blank').toLowerCase();
+        const title = (tab.title || 'Untitled').toLowerCase();
+        const url = (tab.url || 'about:blank').toLowerCase();
       
         // Filter match? (If empty string, it matches everything)
         if (filterTerm === '' || title.includes(filterTerm) || url.includes(filterTerm)) {
@@ -744,7 +744,7 @@ function renderWindowContent() {
   if (tabsToRender.length === 0 && filterTerm !== '') {
     contentArea.innerHTML = '<div class="empty-state">No matching tabs found</div>';
     return;
-    }
+  }
 
   // 2. Render Cards
   tabsToRender.forEach(item => {
@@ -1027,7 +1027,7 @@ function attachDragSelectionHandlers() {
 
         // Force it to lose focus
         if (isInput || isEditable) {
-        document.activeElement.blur(); 
+          document.activeElement.blur(); 
         }
     }
 
