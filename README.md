@@ -1,13 +1,17 @@
 # Tab Manager (Chrome extension)
 
-Lightweight Chrome extension to help merge and split tabs between windows using a compact UI.
+Lightweight Chrome extension to help merge, split, and organize tabs between windows using a compact UI.
 
 This extension provides quick actions to merge and split windows and tabs via the packaged UI (`ui.html`).
 
 **Key features**
-- Visual UI for viewing windows and selecting tabs to merge or split.
-- Drag (marquee) selection and multi-select with Ctrl/Cmd for flexible tab grouping.
-- One-click merge/split operations from the UI.
+- **Visual UI** for viewing windows and selecting tabs to merge or split.
+- **Search & Filter**: Quickly find tabs across all or specific windows.
+- **Window Renaming**: Give custom names to your windows for better organization.
+- **Theme Support**: Toggle between Dark and Light modes.
+- **Drag (marquee) selection** and multi-select with Ctrl/Cmd for flexible tab grouping.
+- **One-click merge/split** operations from the UI.
+- **Experimental Drag-and-Drop**: Reorder tabs or move them between windows (enable in Options).
 
 **Works with:** Chrome Manifest V3
 
@@ -15,65 +19,63 @@ This extension provides quick actions to merge and split windows and tabs via th
 1. Clone or download this repository.
 2. Open Chrome and go to `chrome://extensions/`.
 3. Enable **Developer mode** (top-right).
-4. Click **Load unpacked** and select the project folder (`extension_movealltabs` inside the repo).
-5. The extension icon should appear in the toolbar. click the action icon to open the UI.
+4. Click **Load unpacked** and select the project folder (`extension_tabmanager` inside the repo).
+5. The extension icon should appear in the toolbar. Click the action icon to open the UI.
 
 **Usage**
--- Click the extension action (toolbar icon) to open the packaged UI (`ui.html`) which shows windows and tabs and supports drag selection for merges/splits. All merge and split operations are performed from this UI.
+-- Click the extension action (toolbar icon) to open the packaged UI (`ui.html`) which shows windows and tabs. All management operations are performed from this UI.
 
 ## Detailed Usage — UI controls, clicks and keys
 
-This section explains how to use the optional packaged UI (`ui.html`) and the meanings of clicks, drag gestures and keyboard shortcuts found in the UI.
+This section explains how to use the packaged UI (`ui.html`) and the meanings of clicks, gestures, and shortcuts.
 
-- **Open the UI**: Click the extension action (toolbar icon) or open `ui.html` in an extension tab. The UI shows a horizontal list of windows at the top and the tabs of the active window below.
+### Window List (Sidebar)
+- **Select Window**: Single click to make it the active window and view its tabs.
+- **Rename Window**: Click on the window title (when active) to rename it. Press **Enter** to save.
+- **Selection**:
+    - **Ctrl/Cmd + Click**: Toggle selection of all tabs in that window.
+    - **Double-click**: Switch to that window and select all its tabs.
+- **New Window**: Click the **+** button at the bottom of the list to create a blank window.
+- **Close Window**: Click the **✕** button to close the window and all its tabs.
 
-- **Top window tabs (window list)**:
-	- Single click: make the clicked window the active window and show its tabs.
-	- Ctrl (Windows/Linux) or Cmd (macOS) + click: toggle the selection of all the tabs in the window (adds/removes it from the blue selection).
-	- Double-click: switch to that window and select all tabs in it.
+### Tab Cards (Main Content)
+- **Selection**:
+	- **Single click**: Select the tab (blue selection).
+	- **Ctrl/Cmd + click**: Toggle selection (add/remove from blue selection).
+- **Marquee Selection**: Click and drag in an empty space to draw a box. Cards touching the box become selected.
+    - Hold **Shift** while dragging to add to the existing selection.
+- **Switch Tab**: Double-click a card to focus that tab in the browser.
+- **Close Tab**: Click the **✕** button on a card to close it.
 
-- **Tab cards (page cards in the content area)**:
-	- Single click: select the clicked tab as the current selection (blue selection). If you click another card without modifiers it replaces the blue selection with that single tab.
-	- Ctrl (Windows/Linux) or Cmd (macOS) + click: toggle the selection of that tab (adds/removes it from the blue selection).
-	- Close button (✕) on a card: closes that tab immediately.
-
-- **Drag selection (marquee)**:
-	- Click and drag inside the tabs area to draw a marquee. Cards that intersect the marquee become selected (blue) temporarily and then become the new blue selection on mouse up.
-	- While dragging: hold **Shift** to union the current blue selection with the previous blue selection (i.e., add them). Drag without Shift will replace the current selection with the new selection.
-
-- **Top controls (Merge, Merge All, Split)**:
+### Top Controls
+- **Search**: Type in the search bar to filter tabs by title or URL.
+    - Click the **Filter icon** next to the search bar to choose which windows to include in the search (All, None, or specific windows).
+- **Theme Toggle**: Click the **🌓** icon to switch between Light and Dark themes.
+- **Merge Actions**:
 	- `Merge` (multi-stage):
-		1. Stage 1 — Select one or more tabs (blue selection) that you want to mark as the source, then click `Merge`. The selection becomes the **red** selection (source) and `merge` ends Stage 1.
-		2. Stage 2 — Select one or more tabs to be the target (blue selection), then click `Merge` again. The target selection becomes **yellow** and `merge` ends Stage 2.
-		3. Stage 3 — Click `Merge` again to execute: the extension creates a new window from the first tab in the combined selections (red selection) and moves the remaining tabs (yellow selection) into that new window. After completion the UI refreshes.
-		- If you start a merge but decide to cancel, press **Escape** to clear selections and exit merge mode.
-	- `Merge All`: merges every other window into the window that currently hosts the UI. This is a one-click operation that moves all tabs from other windows into the target window.
-	- `Split`: moves the current blue selection into a newly created window. The first selected tab becomes the initial tab in the new window and any remaining selected tabs are moved into it.
+		1. **Stage 1**: Select tabs (blue) to be the *source*, then click `Merge` (turns red).
+		2. **Stage 2**: Select tabs (blue) to be the *target* group, then click `Merge` (turns yellow).
+		3. **Stage 3**: Click `Merge` again to execute. A new window is created combining the source and target groups.
+	- `Merge All`: Moves all tabs from *other* windows into the currently active window.
+	- `Split`: Moves the currently selected tabs (blue) into a newly created window.
 
-- **Keyboard**:
-	- `Escape`: clears all selections (blue/red/yellow) and exits merge mode.
+### Keyboard Shortcuts
+- `Escape`: Clear all selections and exit merge mode.
+- `Delete`: Close the currently selected tabs.
+- `Enter`: Save window name (while renaming).
 
-- **Notes and tips**:
-	- The UI keeps a lightweight snapshot of windows and only re-renders when something changed; background tab/window events also trigger refreshes.
-	- If you click controls but the UI tab moved to another window (for example, you opened or focused another window), the UI attempts to refresh its own window id automatically before performing moves.
-	- Alerts will appear if you try to perform actions with no selection (for example, clicking `Split` with no tabs selected).
+### Experimental Features (Options)
+Right-click the extension icon and select **Options** to enable experimental features:
+- **Enable Move Tabs**: When checked, you can drag selected tabs (blue) to reorder them or drop them onto another window in the sidebar to move them instantly.
 
-
-**Files of interest**
-- `manifest.json` — extension metadata and permissions (Manifest V3).
-- `background.js` — lightweight background script; the action opens the packaged UI (`ui.html`).
-- `ui.html`, `ui.js`, `ui.css` — packaged UI for viewing windows/tabs and doing merges/splits with mouse/keyboard interactions.
+## Files of interest
+- `manifest.json` — Extension metadata and permissions (Manifest V3).
+- `background.js` — Service worker; opens the packaged UI.
+- `ui.html`, `ui.js`, `ui.css` — The main interface for managing tabs.
+- `options.html`, `options.js` — Settings page for feature flags.
 
 **Permissions required**
-- `tabs` — to move and query tabs.
-- `windows` — to create and manage browser windows.
-
-**Development notes**
-- The extension uses event listeners in `background.js` to update the context menus when the focused window changes.
-- The UI (`ui.html`) is a simple single-page interface for visual selection; it relies on the `chrome.*` extension APIs available to extension pages.
-
-**Load locally / test**
-1. Visit `chrome://extensions/`.
-2. Enable Developer Mode.
-3. Click `Load unpacked` and select the `extension_movealltabs` folder in this repository.
-
+- `tabs` — To move, query, and close tabs.
+- `windows` — To create and manage browser windows.
+- `storage` — To save custom window names and settings.
+- `favicon` — To display tab icons.
