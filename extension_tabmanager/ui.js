@@ -878,6 +878,17 @@ function createPageCard(tab, windowId, windowName) {
     }
   });
 
+  // Double-click to switch to tab
+  card.addEventListener('dblclick', async (e) => {
+    e.stopPropagation();
+    try {
+      await chrome.windows.update(windowId, { focused: true });
+      await chrome.tabs.update(tab.id, { active: true });
+    } catch (err) {
+      console.error('Error switching to tab:', err);
+    }
+  });
+
   // Update visual state
   updateCardSelectionState(card, tab.id);
 
