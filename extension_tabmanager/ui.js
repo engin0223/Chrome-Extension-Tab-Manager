@@ -170,14 +170,21 @@ async function loadWindowsAndTabs() {
       }
     });
 
-    // Create a lightweight snapshot (window id -> ordered tab ids)
-    const snapshot = JSON.stringify(sorted.map(w => ({ id: w.id, tabs: w.tabs.map(t => t.id), customName: w.customName })));
+    // Create a lightweight snapshot.
+    // UPDATE: We now include 'splitViewId' in the snapshot so that changes to split state
+    // trigger a re-render even if the tab list order hasn't changed.
+    const snapshot = JSON.stringify(sorted.map(w => ({ 
+      id: w.id, 
+      tabs: w.tabs.map(t => ({ id: t.id, split: t.splitViewId })), 
+      customName: w.customName 
+    })));
 
     // If nothing changed since last snapshot, avoid re-rendering
     if (lastSnapshot !== snapshot) {
       lastSnapshot = snapshot;
     }
-
+    
+    lastSnapshot = snapshot;
     windowsData = sorted;
     
     if (windowsData.length === 0) {
@@ -704,9 +711,9 @@ async function splitCurrentWindow(windowId, option = 'others-to-new') {
 }
 
 /**
-  * Renders the main content area showing tabs from selected windows,
-  * applying the current search filter.
-  * @returns {void}
+ * Renders the main content area showing tabs from selected windows,
+ * applying the current search filter and grouping Split View tabs.
+ * @returns {void}
  */
 function renderWindowContent() {
   const contentArea = document.getElementById('windowContent');
@@ -719,17 +726,12 @@ function renderWindowContent() {
   // 1. Gather all tabs from the SELECTED windows
   let tabsToRender = [];
   
-  // If no windows selected, maybe show empty or default to active?
-  // Let's assume user wants to see nothing if they unchecked everything.
-  
   windowsData.forEach(win => {
-    // Only process this window if it is in our "Checked" set
     if (searchTargetWindowIds.has(win.id)) {
       win.tabs.forEach(tab => {
         const title = (tab.title || 'Untitled').toLowerCase();
         const url = (tab.url || 'about:blank').toLowerCase();
       
-        // Filter match? (If empty string, it matches everything)
         if (filterTerm === '' || title.includes(filterTerm) || url.includes(filterTerm)) {
           tabsToRender.push({
             tab: tab,
@@ -746,15 +748,219 @@ function renderWindowContent() {
     return;
   }
 
-  // 2. Render Cards
+  // 2. Group tabs by Split View ID
+  const groups = [];
+  const processedTabIds = new Set();
+
   tabsToRender.forEach(item => {
-    // We pass the Window Name so createPageCard can display a badge
-    const card = createPageCard(item.tab, item.windowId, item.windowName);
-    contentArea.appendChild(card);
+    if (processedTabIds.has(item.tab.id)) return;
+
+    // Check for experimental splitViewId (property may vary by browser/version)
+    const splitId = item.tab.splitViewId; 
+    
+    // We group if splitId exists, is valid (>-1), and has not been processed
+    if (splitId && splitId !== -1) {
+       // Find other tabs in the same window with the same splitId
+       const partners = tabsToRender.filter(t => 
+          t.tab.splitViewId === splitId && 
+          t.windowId === item.windowId
+       );
+
+       if (partners.length > 1) {
+         // It is a split view group
+         groups.push({ type: 'split', items: partners });
+         partners.forEach(p => processedTabIds.add(p.tab.id));
+       } else {
+         groups.push({ type: 'single', item });
+         processedTabIds.add(item.tab.id);
+       }
+    } else {
+      groups.push({ type: 'single', item });
+      processedTabIds.add(item.tab.id);
+    }
+  });
+
+  // 3. Render Cards
+  groups.forEach(group => {
+    if (group.type === 'split') {
+       const card = createSplitPageCard(group.items);
+       contentArea.appendChild(card);
+    } else {
+       const card = createPageCard(group.item.tab, group.item.windowId, group.item.windowName);
+       contentArea.appendChild(card);
+    }
   });
 
   // Ensure the sidebar still highlights the "Main" active window correctly
   renderWindowTabs();
+}
+
+/**
+ * Creates a split-view card containing multiple tabs side-by-side.
+ * Includes a "Close Group" button to close all tabs in the view.
+ * @param {Array} items - Array of objects { tab, windowId, windowName }
+ * @returns {HTMLElement}
+ */
+function createSplitPageCard(items) {
+  const card = document.createElement('div');
+  card.className = 'page-card split-view-card';
+  
+  // Store all tab IDs in dataset
+  const tabIds = items.map(i => i.tab.id);
+  card.dataset.tabIds = JSON.stringify(tabIds);
+  card.dataset.windowId = items[0].windowId;
+  // Default to first tab ID for legacy drag logic (though drag logic should ideally update to handle groups)
+  card.dataset.tabId = tabIds[0]; 
+
+  // --- GLOBAL CLOSE BUTTON ---
+  const closeGroupBtn = document.createElement('button');
+  closeGroupBtn.className = 'split-group-close-btn';
+  closeGroupBtn.innerHTML = '✕'; // You could also use a different icon like '🗑'
+  closeGroupBtn.title = 'Close entire split view';
+  closeGroupBtn.addEventListener('click', async (e) => {
+    e.stopPropagation(); // Prevent selection
+    try {
+      // Remove all tabs in this split view
+      await chrome.tabs.remove(tabIds);
+      // Animate removal
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.9)';
+      setTimeout(() => {
+        card.remove();
+        if (document.querySelectorAll('.page-card').length === 0) loadWindowsAndTabs();
+      }, 200);
+    } catch (err) { console.error('Error closing split view:', err); }
+  });
+  card.appendChild(closeGroupBtn);
+
+
+  // --- INDIVIDUAL PANES ---
+  items.forEach(({ tab, windowId }) => {
+    const pane = document.createElement('div');
+    pane.className = 'split-pane';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'page-card-header';
+
+    // Favicon
+    const favicon = document.createElement('img');
+    favicon.className = 'page-card-favicon';
+    if (tab.url) {
+        const url = new URL(chrome.runtime.getURL('/_favicon/'));
+        url.searchParams.set('pageUrl', tab.url);
+        url.searchParams.set('size', '64');
+        favicon.src = url.toString();
+    } else {
+        favicon.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
+    }
+
+    // Title
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'page-card-title';
+    titleSpan.title = tab.title;
+    titleSpan.textContent = tab.title || 'Untitled';
+
+    // Individual Close Button
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'page-card-close-btn';
+    closeBtn.innerHTML = '✕';
+    closeBtn.title = 'Close this tab';
+    closeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+            await chrome.tabs.remove(tab.id);
+            // Reloading is safest to re-render the card as a single item if one pane closes
+            setTimeout(loadWindowsAndTabs, 100); 
+        } catch (error) { console.error(error); }
+    });
+
+    header.appendChild(favicon);
+    header.appendChild(titleSpan);
+    header.appendChild(closeBtn);
+
+    // Content
+    const content = document.createElement('div');
+    content.className = 'page-card-content';
+    const urlSpan = document.createElement('span');
+    urlSpan.className = 'page-url';
+    urlSpan.textContent = tab.url || 'about:blank';
+    content.appendChild(urlSpan);
+
+    pane.appendChild(header);
+    pane.appendChild(content);
+
+    // Double-click pane to focus
+    pane.addEventListener('dblclick', async (e) => {
+        e.stopPropagation();
+        try {
+            await chrome.windows.update(windowId, { focused: true });
+            await chrome.tabs.update(tab.id, { active: true });
+        } catch (err) { console.error(err); }
+    });
+
+    card.appendChild(pane);
+  });
+
+  // --- CARD SELECTION EVENTS ---
+  card.addEventListener('click', (e) => {
+      // Don't trigger if clicked on controls (close buttons)
+      if (e.target.closest('button')) return;
+
+      if (!tabIds.some(id => redSelection.includes(id) || yellowSelection.includes(id))) {
+          if (dragWasActive) { dragWasActive = false; return; }
+
+          if (e.ctrlKey || e.metaKey) {
+              // Toggle all tabs in this split view
+              const allSelected = tabIds.every(id => blueSelection.includes(id));
+              if (allSelected) {
+                  blueSelection = blueSelection.filter(id => !tabIds.includes(id));
+              } else {
+                  // Add missing ones
+                  tabIds.forEach(id => {
+                      if (!blueSelection.includes(id)) blueSelection.push(id);
+                  });
+              }
+          } else {
+              // Select ONLY these tabs
+              blueSelection = [...tabIds];
+          }
+          renderWindowContent(); 
+      }
+  });
+
+  updateSplitCardSelectionState(card, tabIds);
+  return card;
+}
+
+/**
+ * Updates selection visuals for a split card. 
+ * Considers selected if ALL tabs in the split view are selected.
+ */
+function updateSplitCardSelectionState(card, tabIds) {
+    let badge = card.querySelector('.selection-badge');
+    if (badge) badge.remove();
+
+    const isRed = tabIds.every(id => redSelection.includes(id));
+    const isYellow = tabIds.every(id => yellowSelection.includes(id));
+    const isBlue = tabIds.every(id => blueSelection.includes(id));
+
+    if (isRed) {
+        card.classList.add('selected-red');
+        addBadge(card);
+    } else if (isYellow) {
+        card.classList.add('selected-yellow');
+        addBadge(card);
+    } else if (isBlue) {
+        card.classList.add('selected-blue');
+    }
+}
+
+function addBadge(card) {
+    const badge = document.createElement('div');
+    badge.className = 'selection-badge';
+    badge.textContent = 'selected';
+    card.appendChild(badge);
 }
 
 /**
@@ -1377,10 +1583,17 @@ chrome.windows.onRemoved.addListener(() => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  // Check if any visible property (URL, Title, Favicon) has changed
+  // 1. Structural Changes: Check if splitViewId changed.
+  // This ensures that if tabs separate or join a split view, the UI reloads to group/ungroup them.
+  if (changeInfo.splitViewId !== undefined) {
+    loadWindowsAndTabs();
+    return;
+  }
+
+  // 2. Visual Changes: Check if any visible property has changed
   if (changeInfo.url || changeInfo.title || changeInfo.favIconUrl) {
     
-    // 1. Update the internal data model
+    // Update internal data model
     for (const win of windowsData) {
       const storedTab = win.tabs.find(t => t.id === tabId);
       if (storedTab) {
@@ -1391,35 +1604,36 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       }
     }
 
-    // 2. If a search is active, re-render the whole list to ensure correct filtering
+    // If a search is active, re-render the whole list to ensure correct filtering
     const searchInput = document.getElementById('tabSearchInput');
     if (searchInput && searchInput.value) {
       renderWindowContent();
       return;
     }
 
-    // 3. Otherwise, update the specific card DOM element directly
+    // Try to find the specific card. Note: This simple selector might not work for 2nd pane in split view.
+    // If we can't find it easily, falling back to reload (or implementing complex DOM traversal) is safer.
+    // For now, let's keep the optimization for single cards.
     const card = document.querySelector(`.page-card[data-tab-id="${tabId}"]`);
     if (card) {
-      // Update Title
       const titleEl = card.querySelector('.page-card-title');
       if (titleEl) {
         titleEl.textContent = tab.title || 'Untitled';
         titleEl.title = tab.title || '';
       }
-
-      // Update URL
       const urlEl = card.querySelector('.page-url');
       if (urlEl) {
         urlEl.textContent = tab.url || 'about:blank';
         urlEl.title = tab.url || '';
       }
-
-      // Update Favicon
       const favEl = card.querySelector('.page-card-favicon');
       if (favEl) {
         favEl.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
       }
+    } else {
+        // Card not found via standard ID selector? Might be inside a split view or just missing.
+        // It's safer to just reload to ensure UI consistency.
+        loadWindowsAndTabs(); 
     }
   }
 });
