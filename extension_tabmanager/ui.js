@@ -1283,12 +1283,19 @@ function attachDragSelectionHandlers() {
     // otherwise start marquee selection
     isDragging = true;
     dragWasActive = false;
-    dragStart = { x: e.clientX, y: e.clientY };
+    
+    // --- FIX: Store drag start in Content Coordinates (anchored to the page) ---
+    const rect = container.getBoundingClientRect();
+    dragStart = { 
+      x: e.clientX - rect.left + container.scrollLeft, 
+      y: e.clientY - rect.top + container.scrollTop 
+    };
 
     marqueeEl = document.createElement('div');
     marqueeEl.className = 'marquee';
-    marqueeEl.style.left = '0px';
-    marqueeEl.style.top = '0px';
+    // Initial position in content coords
+    marqueeEl.style.left = `${dragStart.x}px`;
+    marqueeEl.style.top = `${dragStart.y}px`;
     marqueeEl.style.width = '0px';
     marqueeEl.style.height = '0px';
     container.appendChild(marqueeEl);
@@ -1378,23 +1385,28 @@ function attachDragSelectionHandlers() {
     if (!isDragging || !marqueeEl) return;
     dragWasActive = true;
     const rect = container.getBoundingClientRect();
-    const x1 = Math.min(dragStart.x, e.clientX);
-    const y1 = Math.min(dragStart.y, e.clientY);
-    const x2 = Math.max(dragStart.x, e.clientX);
-    const y2 = Math.max(dragStart.y, e.clientY);
+    
+    const currentX = e.clientX - rect.left + container.scrollLeft;
+    const currentY = e.clientY - rect.top + container.scrollTop;
 
-    const left = x1 - rect.left;
-    const top = y1 - rect.top;
-    const width = x2 - x1;
-    const height = y2 - y1;
+    const x1 = Math.min(dragStart.x, currentX);
+    const y1 = Math.min(dragStart.y, currentY);
+    const x2 = Math.max(dragStart.x, currentX);
+    const y2 = Math.max(dragStart.y, currentY);
 
-    marqueeEl.style.left = `${left}px`;
-    marqueeEl.style.top = `${top}px`;
-    marqueeEl.style.width = `${width}px`;
-    marqueeEl.style.height = `${height}px`;
+    marqueeEl.style.left = `${x1}px`;
+    marqueeEl.style.top = `${y1}px`;
+    marqueeEl.style.width = `${x2 - x1}px`;
+    marqueeEl.style.height = `${y2 - y1}px`;
 
     // compute intersection with cards and highlight temporarily
-    const marqueeClient = { left: x1, top: y1, right: x2, bottom: y2 };
+    const marqueeClient = { 
+       left: x1 - container.scrollLeft + rect.left,
+       top: y1 - container.scrollTop + rect.top,
+       right: x2 - container.scrollLeft + rect.left, 
+       bottom: y2 - container.scrollTop + rect.top
+    };
+
     const cards = Array.from(container.querySelectorAll('.page-card'));
     cards.forEach(card => {
       const r = card.getBoundingClientRect();
@@ -1503,12 +1515,22 @@ function attachDragSelectionHandlers() {
     // otherwise handle marquee end
     isDragging = false;
     const rect = container.getBoundingClientRect();
-    const x1 = Math.min(dragStart.x, e.clientX);
-    const y1 = Math.min(dragStart.y, e.clientY);
-    const x2 = Math.max(dragStart.x, e.clientX);
-    const y2 = Math.max(dragStart.y, e.clientY);
-    const marqueeClient = { left: x1, top: y1, right: x2, bottom: y2 };
 
+    const currentX = e.clientX - rect.left + container.scrollLeft;
+    const currentY = e.clientY - rect.top + container.scrollTop;
+
+    const x1 = Math.min(dragStart.x, currentX);
+    const y1 = Math.min(dragStart.y, currentY);
+    const x2 = Math.max(dragStart.x, currentX);
+    const y2 = Math.max(dragStart.y, currentY);
+    
+    const marqueeClient = { 
+       left: x1 - container.scrollLeft + rect.left,
+       top: y1 - container.scrollTop + rect.top,
+       right: x2 - container.scrollLeft + rect.left, 
+       bottom: y2 - container.scrollTop + rect.top
+    };
+    
     const cards = Array.from(container.querySelectorAll('.page-card'));
     const selectedIds = [];
     cards.forEach(card => {
