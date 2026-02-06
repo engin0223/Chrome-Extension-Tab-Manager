@@ -1,0 +1,113 @@
+/* THEME DEFINITIONS */
+
+/* 1. DEFAULT DARK THEME */
+:root {
+  /* --- Core Backgrounds --- */
+  --bg-body: #1d1d20;
+  --bg-tabs-bar: #2d2d30;
+  --bg-controls-bar: #1d1d20;
+  --bg-content-area: #252526;
+  
+  /* --- Interactive Elements --- */
+  --bg-element-interactive: #3e3e42;
+  --bg-element-hover: #454549;
+  --bg-tab-active: #1c1c1c;
+  
+  /* --- Page Cards --- */
+  --bg-card: #1e1e1e;
+  --bg-card-selected-blue: #1a2332;
+  --bg-card-selected-red: #2a1e1e;
+  --bg-card-selected-yellow: #2a2818;
+  --bg-ghost: rgba(30, 30, 30, 0.98);
+
+  /* --- Text Colors --- */
+  --text-bright: #ffffff;
+  --text-primary: #cccccc;
+  --text-secondary: #cfcfcf;
+  --text-muted: #858585;
+  --text-danger: #f48771;
+
+  /* --- Borders --- */
+  --border-dark: #1e1e1e;
+  --border-light: #3e3e42;
+  --border-hover: #555555;
+
+  /* --- Scrollbars --- */
+  --scrollbar-thumb: #464647;
+  --scrollbar-thumb-hover: #5a5a5a;
+  --scrollbar-track: #1e1e1e;
+
+  /* --- Accents --- */
+  --accent-blue: #007acc;
+  --accent-blue-dim: rgba(0, 122, 204, 0.10);
+  --accent-blue-faint: rgba(0, 122, 204, 0.06);
+  --accent-blue-dashed: rgba(0, 122, 204, 0.4);
+  
+  --tab-highlight-blue-bg: darkblue;
+  --tab-highlight-blue-border: blue;
+  
+  --tab-highlight-red-bg: darkred;
+  --tab-highlight-red-border: red;
+  
+  --tab-highlight-yellow-bg: darkgoldenrod;
+  --tab-highlight-yellow-border: yellow;
+
+  --card-highlight-red-border: #d16969;
+  --card-highlight-yellow-border: #dcdcaa;
+
+  /* --- Utilities --- */
+  --badge-bg: rgba(0, 0, 0, 0.6);
+  --drop-target-outline: rgba(0, 122, 204, 0.9);
+}
+
+/* 2. LIGHT THEME */
+body.light-theme {
+  --bg-body: #ffffff;
+  --bg-tabs-bar: #f4f4f4;
+  --bg-controls-bar: #ffffff;
+  --bg-content-area: #f9f9f9;
+  
+  --bg-element-interactive: #e8e8e8;
+  --bg-element-hover: #dbdbdb;
+  --bg-tab-active: #ffffff;
+  
+  --bg-card: #fdfdfd;
+  --bg-card-selected-blue: #cce0ff;
+  --bg-card-selected-red: #ffebeb;
+  --bg-card-selected-yellow: #fffae0;
+  --bg-ghost: rgba(255, 255, 255, 0.98);
+
+  --text-bright: #1d1d1d;
+  --text-primary: #333333;
+  --text-secondary: #444444;
+  --text-muted: #808080;
+  --text-danger: #cc0000;
+
+  --border-dark: #cccccc;
+  --border-light: #e0e0e0;
+  --border-hover: #aaaaaa;
+
+  --scrollbar-thumb: #999999;
+  --scrollbar-thumb-hover: #777777;
+  --scrollbar-track: #f0f0f0;
+
+  --accent-blue: #007acc;
+  --accent-blue-dim: rgba(0, 122, 204, 0.20);
+  --accent-blue-faint: rgba(0, 122, 204, 0.10);
+  --accent-blue-dashed: rgba(0, 122, 204, 0.6);
+  
+  --tab-highlight-blue-bg: #e6f0ff;
+  --tab-highlight-blue-border: #4da6ff;
+  
+  --tab-highlight-red-bg: #ffe6e6;
+  --tab-highlight-red-border: #ff8080;
+  
+  --tab-highlight-yellow-bg: #fffbe6;
+  --tab-highlight-yellow-border: #ffd74d;
+
+  --card-highlight-red-border: #ff6666;
+  --card-highlight-yellow-border: #cccc33;
+
+  --badge-bg: rgba(0, 0, 0, 0.8);
+  --drop-target-outline: rgba(0, 122, 204, 0.9);
+}

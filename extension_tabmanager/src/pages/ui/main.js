@@ -1,0 +1,180 @@
+import { state } from '../../modules/store.js';
+import * as API from '../../modules/api.js';
+import * as Renderer from '../../modules/ui-renderer.js';
+import { initializeSessionManager } from '../../modules/session-manager.js';
+import { attachDragHandlers } from '../../modules/drag-drop.js';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // 1. Setup Theme & Basic Config
+    document.body.classList.toggle('light-theme', window.matchMedia('(prefers-color-scheme: light)').matches);
+    const prefs = await chrome.storage.sync.get({ moveTabsEnabled: false });
+    state.moveTabsEnabled = prefs.moveTabsEnabled;
+
+    // 2. Initial Data Load
+    await API.fetchWindowsAndTabs();
+    
+    // 3. Render Initial State
+    refreshUI();
+    
+    // 4. Attach Event Listeners
+    setupTopControls();
+    setupSearch();
+    initializeSessionManager();
+    attachDragHandlers(document.getElementById('windowContent'), refreshUI);
+    
+    // 5. Chrome Event Listeners
+    const reload = () => API.fetchWindowsAndTabs().then(refreshUI);
+    chrome.tabs.onCreated.addListener(reload);
+    chrome.tabs.onRemoved.addListener(reload);
+    chrome.tabs.onUpdated.addListener(reload);
+    chrome.windows.onCreated.addListener(reload);
+    chrome.windows.onRemoved.addListener(reload);
+    
+    // 6. Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            state.clearAllSelections();
+            refreshUI();
+        }
+    });
+
+    // 7. Theme Toggle
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'window-tab-theme-toggle-btn';
+    toggleBtn.innerHTML = `
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(0deg);">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+    `;
+    toggleBtn.title = 'Toggle light/dark theme';
+    toggleBtn.onclick = () => document.body.classList.toggle('light-theme');
+    document.getElementById('staticControls').appendChild(toggleBtn);
+});
+
+function refreshUI() {
+    Renderer.renderWindowTabs(handleWindowTabClick, (id) => {
+        API.activateTab(id, state.windowsData.find(w=>w.id===id).tabs[0].id);
+    });
+    Renderer.renderWindowContent(handleCardClick);
+}
+
+function handleWindowTabClick(e, id, labelEl) {
+    if (e.ctrlKey) {
+        // Toggle selection logic for window tabs
+        const win = state.windowsData.find(w => w.id === id);
+        const ids = win.tabs.map(t => t.id);
+        const allSel = ids.every(i => state.blueSelection.includes(i));
+        if (allSel) state.blueSelection = state.blueSelection.filter(i => !ids.includes(i));
+        else state.blueSelection = [...new Set([...state.blueSelection, ...ids])];
+    } else {
+        // Switch active window
+        if (state.activeWindowId !== id) {
+            state.activeWindowId = id;
+            state.searchTargetWindowIds = new Set([id]);
+            labelEl.contentEditable = true;
+        }
+    }
+    refreshUI();
+}
+
+function handleCardClick(e, tabIds, isSplitGroup = false) {
+    if(!Array.isArray(tabIds)) tabIds = [tabIds];
+    
+    if (state.mergeMode) return; // Ignore selection during merge phases logic handled by buttons usually
+
+    if (e.ctrlKey || e.metaKey) {
+        const allSelected = tabIds.every(id => state.blueSelection.includes(id));
+        if (allSelected) state.blueSelection = state.blueSelection.filter(id => !tabIds.includes(id));
+        else state.blueSelection = [...state.blueSelection, ...tabIds];
+    } else {
+        state.blueSelection = [...tabIds];
+    }
+    refreshUI();
+}
+
+function setupTopControls() {
+    document.getElementById('sessionBtn').onclick = () => {
+        document.getElementById('wrapper').classList.toggle('sidebar-open');
+    };
+
+    document.getElementById('mergeBtn').onclick = async () => {
+        if (state.blueSelection.length === 0 && state.mergeMode !== 'yellow') return alert('No tabs selected');
+
+        if (state.mergeMode === null) {
+            state.redSelection = [...state.blueSelection];
+            state.blueSelection = [];
+            state.mergeMode = 'red';
+        } else if (state.mergeMode === 'red') {
+            state.yellowSelection = [...state.blueSelection];
+            state.blueSelection = [];
+            state.mergeMode = 'yellow';
+            
+            // Execute Merge
+            const combined = [...state.redSelection, ...state.yellowSelection];
+            const newWin = await API.createSplitWindow(combined);
+            state.clearAllSelections();
+            await API.fetchWindowsAndTabs();
+        }
+        refreshUI();
+    };
+
+    document.getElementById('splitBtn').onclick = async () => {
+        if (!state.blueSelection.length) return alert("Select tabs");
+        await API.createSplitWindow([...state.blueSelection]);
+        state.clearAllSelections();
+        await API.fetchWindowsAndTabs();
+        refreshUI();
+    };
+    
+    document.getElementById('mergeAllBtn').onclick = async () => {
+        const target = state.activeWindowId;
+        for (const w of state.windowsData) {
+            if (w.id !== target) {
+                await API.moveTabs(w.tabs.map(t=>t.id), target);
+            }
+        }
+        await API.fetchWindowsAndTabs();
+        refreshUI();
+    };
+}
+
+function setupSearch() {
+    const btn = document.getElementById('searchFilterBtn');
+    const menu = document.getElementById('searchFilterMenu');
+    const list = document.getElementById('filterWindowList');
+    
+    btn.onclick = (e) => {
+        e.stopPropagation();
+        menu.classList.toggle('visible');
+        
+        list.innerHTML = '';
+        state.windowsData.forEach(w => {
+            const div = document.createElement('div');
+            div.className = 'filter-option';
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.checked = state.searchTargetWindowIds.has(w.id);
+            chk.onchange = () => {
+                if(chk.checked) state.searchTargetWindowIds.add(w.id);
+                else state.searchTargetWindowIds.delete(w.id);
+                refreshUI();
+            };
+            div.append(chk, w.customName || `Window ${w.id}`);
+            list.appendChild(div);
+        });
+    };
+    
+    document.getElementById('tabSearchInput').addEventListener('input', refreshUI);
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target) && e.target !== btn) menu.classList.remove('visible');
+    });
+    
+    document.getElementById('filterSelectAll').onclick = () => {
+        state.windowsData.forEach(w => state.searchTargetWindowIds.add(w.id));
+        refreshUI();
+    };
+    document.getElementById('filterSelectNone').onclick = () => {
+        state.searchTargetWindowIds.clear();
+        refreshUI();
+    };
+}

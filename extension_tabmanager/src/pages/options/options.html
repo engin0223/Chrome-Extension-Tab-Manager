@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tab Manager Settings</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .container { max-width: 400px; margin: 0 auto; border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+    .status { color: green; display: none; margin-top: 10px; }
+    .status.show { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Settings</h1>
+    <label>
+      <input type="checkbox" id="enableMoveTabs"> Enable Drag-and-Drop Move (Experimental)
+    </label>
+    <div id="status" class="status">Saved!</div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
