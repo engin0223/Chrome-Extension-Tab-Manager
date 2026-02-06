@@ -16,6 +16,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 3. Load Data and Attach Complex Handlers
   loadWindowsAndTabs();
   attachDragSelectionHandlers();
+  attachTopControls();
+  
+  // 4. Initialize Sessions (New)
+  initializeSessionManager();
 });
 
 /**
@@ -40,7 +44,7 @@ function setupUserInterface() {
       yellowSelection = [];
       mergeMode = null;
       renderWindowContent();
-      console.log('Escape key pressed - selections cleared');
+      // console.log('Escape key pressed - selections cleared');
     }
 
     if (event.key === 'Delete' && blueSelection.length) {
@@ -57,6 +61,14 @@ function setupUserInterface() {
     }
     
   });
+
+  // CSP-Compliant Image Error Handling
+  // We use a capture-phase listener because 'error' events do not bubble.
+  document.addEventListener('error', (e) => {
+    if (e.target.tagName === 'IMG') {
+        e.target.style.display = 'none';
+    }
+  }, true);
 
   // Add listener in setupUserInterface()
   document.getElementById('tabSearchInput').addEventListener('input', (e) => {
@@ -97,10 +109,294 @@ function setupUserInterface() {
     controlsContainer.appendChild(themeToggle);
   }
 }
+
+// Global map to store active timers for each content element
+const activeTimers = new Map();
+
+/* ==========================================================================
+   SESSION MANAGER IMPLEMENTATION
+   ========================================================================== */
+
+function initializeSessionManager() {
+    const sidebarContent = document.getElementById('sidebarContent');
+    const saveBtn = document.getElementById('saveSessionBtn');
+
+    // 1. Attach Global Event Delegation for Sidebar Toggles
+    sidebarContent.addEventListener('click', (e) => {
+        // [FIX] Check for Specific Buttons FIRST
+        // Since buttons are inside the header, checking for header first will swallow the event.
+        
+        // Handle Restore Session Button
+        if (e.target.closest('.restore-session-btn')) {
+            const sessionEl = e.target.closest('.sidebar-session');
+            restoreSession(sessionEl.dataset.sessionId);
+            return;
+        }
+
+        // Handle Delete Session Button
+        if (e.target.closest('.delete-session-btn')) {
+            const sessionEl = e.target.closest('.sidebar-session');
+            deleteSession(sessionEl.dataset.sessionId);
+            return;
+        }
+
+        // Handle Window Header Click (Inside a session)
+        const windowHeader = e.target.closest('.window-header');
+        if (windowHeader) {
+            const windowEl = windowHeader.closest('.session-window');
+            const contentEl = windowEl.querySelector('.window-tab-list');
+            const sessionContentEl = windowEl.closest('.sidebar-session-content');
+            toggleElement(windowEl, contentEl, sessionContentEl); // Pass session content as parent
+            return;
+        }
+
+        // Handle Session Header Click (Generic Toggle)
+        const sessionHeader = e.target.closest('.sidebar-session-header');
+        if (sessionHeader) {
+            const sessionEl = sessionHeader.closest('.sidebar-session');
+            const contentEl = sessionEl.querySelector('.sidebar-session-content');
+            toggleElement(sessionEl, contentEl, sidebarContent); // Pass sidebar as parent to check scroll
+            return;
+        }
+    });
+
+    // 2. Attach Save Handler
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveCurrentSession);
+    }
+
+    // 3. Initial Load
+    renderSessions();
+}
+
+/**
+ * Robust Toggle Logic that fixes the scroll issue.
+ * Instead of checking children counts, it checks actual DOM scrollHeight vs clientHeight.
+ */
+function toggleElement(containerEl, contentEl, parentContainerToRecheck) {
+    if (!containerEl || !contentEl) return;
+
+    // Toggle the class to start CSS transition
+    containerEl.classList.toggle('expanded');
+    const isExpanded = containerEl.classList.contains('expanded');
+
+    if (!isExpanded) {
+        // COLLAPSING: Immediate hide overflow on self
+        contentEl.style.overflowY = 'hidden';
+    } 
+    
+    // Wait for CSS transition (approx 300-400ms) to finish, then re-calculate layout
+    setTimeout(() => {
+        // CRITICAL FIX: Always recheck the PARENT container's scrollability.
+        // If a small window expanded, the parent might now need a scrollbar 
+        // regardless of the small window's size.
+        if (parentContainerToRecheck) {
+            checkScroll(parentContainerToRecheck);
+        }
+    }, 350);
+}
+
+/**
+ * Checks if an element needs a vertical scrollbar and applies it.
+ */
+function checkScroll(element) {
+    if (!element) return;
+    
+    // If content height > visible height, we need scroll
+    if (element.scrollHeight > element.clientHeight) {
+        element.style.overflowY = 'auto'; // 'auto' is safer than 'scroll'
+    } else {
+        element.style.overflowY = 'hidden';
+    }
+}
+
+/**
+ * Saves the current windows and tabs to local storage as a new session.
+ */
+async function saveCurrentSession() {
+    // 1. Get current data
+    const sessionName = prompt("Enter a name for this session:", `Session ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`);
+    if (!sessionName) return; // User cancelled
+
+    // Get the exact URL of the extension UI to filter it out
+    const extensionUrl = chrome.runtime.getURL('ui.html');
+
+    // Filter and Map
+    const windowsToSave = windowsData.map(win => {
+        // Exclude the extension UI tab
+        const validTabs = win.tabs.filter(t => t.url !== extensionUrl);
+
+        // If the window has no tabs left (was just the UI), return null to filter it out later
+        if (validTabs.length === 0) return null;
+
+        return {
+            id: win.id, // ID is ephemeral, but useful for structure
+            name: win.customName || `Window ${win.id}`,
+            tabs: validTabs.map(t => ({
+                url: t.url,
+                title: t.title,
+                favIconUrl: t.favIconUrl,
+                pinned: t.pinned
+            }))
+        };
+    }).filter(win => win !== null); // Remove empty windows
+
+    // If everything was filtered out, don't save an empty session
+    if (windowsToSave.length === 0) {
+        alert("Cannot save an empty session (or a session containing only the manager).");
+        return;
+    }
+
+    const newSession = {
+        id: Date.now().toString(),
+        name: sessionName,
+        created: Date.now(),
+        windows: windowsToSave
+    };
+
+    // 2. Save to storage
+    const storage = await chrome.storage.local.get({ sessions: [] });
+    const sessions = [newSession, ...storage.sessions]; // Prepend new session
+    await chrome.storage.local.set({ sessions });
+
+    // 3. Re-render sidebar
+    renderSessions();
+    
+    // Flash success (optional UX)
+    const btn = document.getElementById('saveSessionBtn');
+    const originalText = btn.innerText;
+    btn.innerText = "Saved!";
+    setTimeout(() => btn.innerText = originalText, 1500);
+}
+
+/**
+ * Loads sessions from storage and renders them into the sidebar.
+ */
+async function renderSessions() {
+    const container = document.getElementById('sidebarContent');
+    const storage = await chrome.storage.local.get({ sessions: [] });
+    const sessions = storage.sessions;
+
+    if (sessions.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding: 20px; font-size: 12px; color: var(--text-muted); text-align: center;">No saved sessions.<br>Click "Save Current" to start.</div>';
+        return;
+    }
+
+    container.innerHTML = '';
+
+    sessions.forEach(session => {
+        const sessionDate = new Date(session.created).toLocaleDateString();
+        const winCount = session.windows.length;
+        const totalTabs = session.windows.reduce((acc, w) => acc + w.tabs.length, 0);
+
+        // [FIX] Removed onerror attribute from img tags below to fix CSP violation
+        const html = `
+            <div class="sidebar-session" data-session-id="${session.id}">
+                <div class="sidebar-session-header">
+                    <div class="session-info" style="display:flex; flex-direction:column; overflow:hidden; flex:1;">
+                        <span class="session-title" title="${session.name}">${session.name}</span>
+                        <span class="session-meta" style="font-size:10px; color:var(--text-muted);">${winCount} Wins • ${totalTabs} Tabs • ${sessionDate}</span>
+                    </div>
+                    <div class="session-actions" style="display:flex; gap:4px; align-items:center;">
+                         <button class="session-header-btn restore-session-btn" title="Restore Session">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+                         </button>
+                         <button class="session-header-btn delete-session-btn" title="Delete Session">
+                            ✕
+                         </button>
+                    </div>
+                </div>
+                
+                <div class="sidebar-session-content">
+                    ${session.windows.map(win => `
+                        <div class="session-window" data-window-id="${win.id}">
+                            <div class="window-header">
+                                <span class="window-icon">☐</span> 
+                                <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${win.name}</span>
+                                <span class="session-tab-count" style="font-size:10px; color:var(--text-muted);">${win.tabs.length}</span> 
+                            </div>
+                            <ul class="window-tab-list" style="overflow-y: hidden !important;">
+                                ${win.tabs.map(tab => `
+                                    <li class="window-tab-item">
+                                        <img src="${tab.favIconUrl || ''}" style="width:12px; height:12px; margin-right:6px; flex-shrink:0;">
+                                        <span class="window-tab-title" title="${tab.title}">${tab.title}</span>
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        // Create temporary element to convert string to DOM
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html.trim();
+        container.appendChild(tempDiv.firstChild);
+    });
+}
+
+/**
+ * Restores a session by creating new windows and tabs.
+ */
+async function restoreSession(sessionId) {
+    const storage = await chrome.storage.local.get({ sessions: [] });
+    const session = storage.sessions.find(s => s.id === sessionId);
+    
+    if (!session) return;
+
+    if (!confirm(`Restore "${session.name}"? This will open ${session.windows.length} new windows.`)) return;
+
+    // Open windows sequentially to avoid overwhelming Chrome
+    for (const winData of session.windows) {
+        if (winData.tabs.length === 0) continue;
+
+        // Create window with first tab
+        const firstTab = winData.tabs[0];
+        const newWindow = await chrome.windows.create({ 
+            url: firstTab.url,
+            focused: false 
+        });
+
+        // Create remaining tabs
+        // We use a loop instead of array to maintain order more reliably
+        for (let i = 1; i < winData.tabs.length; i++) {
+            await chrome.tabs.create({
+                windowId: newWindow.id,
+                url: winData.tabs[i].url,
+                active: false
+            });
+        }
+        
+        // Restore Custom Name if possible
+        if (winData.name && !winData.name.startsWith("Window")) {
+            saveWindowName(winData.name, newWindow.id);
+        }
+    }
+    
+    // Refresh UI to show new windows
+    setTimeout(loadWindowsAndTabs, 1000);
+}
+
+/**
+ * Deletes a session from storage.
+ */
+async function deleteSession(sessionId) {
+    if (!confirm("Are you sure you want to delete this session?")) return;
+
+    const storage = await chrome.storage.local.get({ sessions: [] });
+    const newSessions = storage.sessions.filter(s => s.id !== sessionId);
+    
+    await chrome.storage.local.set({ sessions: newSessions });
+    renderSessions();
+}
+
+
 /** Global state variables */
 let windowsData = [];
 let activeWindowId = null;
 let lastSnapshot = null;
+let searchTargetWindowIds = new Set();
 
 /**
  * The windowId where the UI page (ui.html) currently lives. Kept up-to-date
@@ -136,6 +432,87 @@ let dragWasActive = false; // suppress click after a drag
  * Feature flag for move-tabs experimental feature
  */
 let moveTabsEnabled = false; // default enabled
+
+
+
+/**
+ * @fileoverview Defines the Tab, Viewport, and Session classes for managing browser-like states.
+ */
+
+/**
+ * Represents a single browser tab.
+ */
+class Tab {
+  /**
+   * Creates an instance of Tab.
+   * @param {string} url - The URL the tab is currently visiting.
+   * @param {string} name - The name or title of the tab.
+   */
+  constructor(url, name) {
+    /**
+     * The URL the tab is currently visiting.
+     * @type {string}
+     */
+    this.url = url;
+
+    /**
+     * The name or title of the tab.
+     * @type {string}
+     */
+    this.name = name;
+  }
+}
+
+/**
+ * Represents a single browser viewport (or window), containing multiple tabs.
+ */
+class Viewport {
+  /**
+   * Creates an instance of Viewport.
+   * @param {string} name - The name or identifier for the viewport.
+   * @param {Tab[]} tabs - An array of Tab objects contained within this viewport.
+   */
+  constructor(name, tabs) {
+    /**
+     * The name or identifier for the viewport.
+     * @type {string}
+     */
+    this.name = name;
+
+    /**
+     * An array of Tab objects contained within this viewport.
+     * @type {Tab[]}
+     */
+    this.tabs = tabs;
+  }
+}
+
+/**
+ * Represents a collection of browser viewports, making up a user's session.
+ */
+class Session {
+  /**
+   * Creates an instance of Session.
+   * @param {string} name - The name or identifier for the session.
+   * @param {Viewport[]} viewports - An array of Viewport objects contained within this session.
+   */
+  constructor(name, viewports) {
+    /**
+     * The name or identifier for the session.
+     * @type {string}
+     */
+    this.name = name;
+
+    /**
+     * An array of Viewport objects contained within this session.
+     * @type {Viewport[]}
+     */
+    this.viewports = viewports;
+  }
+}
+
+
+
 
 /**
  * Load feature flags from storage
@@ -396,6 +773,7 @@ async function renderWindowTabs() {
   windowsData.forEach(async windowData => {
     let tab = tabsList.querySelector(`.window-tab[data-window-id="${windowData.id}"]`);
     let label; 
+    let badge; // New badge variable
 
     // [Block A] Create only if missing
     if (!tab) {
@@ -406,6 +784,13 @@ async function renderWindowTabs() {
       const icon = document.createElement('span');
       icon.className = 'window-tab-icon';
       icon.textContent = '📁';
+
+      // --- NEW BADGE ELEMENT ---
+      badge = document.createElement('span');
+      badge.className = 'window-tab-count-badge';
+      badge.title = 'Number of tabs';
+      // Initial value
+      badge.textContent = windowData.tabs.length;
 
       const closeBtn = document.createElement('button');
       closeBtn.className = 'window-tab-close-btn';
@@ -419,11 +804,9 @@ async function renderWindowTabs() {
       label = document.createElement('span');
       label.className = 'window-tab-label';
       
-      console.log(savedNames[windowData.id]);
+      // LOGIC CHANGE: Removed "(${windowData.tabs.length})" from text
       if (savedNames[windowData.id] === undefined) {
-        console.log('setting default name for window', windowData.id); 
-        console.log('saved name:', savedNames[windowData.id]);
-        label.textContent = `Window ${windowData.id} (${windowData.tabs.length})`;
+        label.textContent = `Window ${windowData.id}`; // Clean name
         saveWindowName(label.textContent, windowData.id);
       } else {
         label.textContent = savedNames[windowData.id];
@@ -437,7 +820,7 @@ async function renderWindowTabs() {
         label.contentEditable = true;
       }
 
-      // Label Listeners
+      // Label Listeners (Same as before)
       label.addEventListener('mousedown', (e) => e.stopPropagation());
       label.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
@@ -449,7 +832,7 @@ async function renderWindowTabs() {
         saveWindowName(newName, windowData.id);
       });
 
-      // Tab Listeners
+      // Tab Listeners (Same as before)
       tab.addEventListener('click', (e) => {
         if (e.ctrlKey || e.metaKey) {
             toggleAllTabsInWindow(windowData.id);
@@ -458,7 +841,9 @@ async function renderWindowTabs() {
         } else {
             if (activeWindowId != windowData.id){
               let oldtab = tabsList.querySelector(`.window-tab[data-window-id="${activeWindowId}"]`);
-              oldtab.children[1].contentEditable = false;
+              if (oldtab) { 
+                  oldtab.children[1].contentEditable = false;
+              }
               activeWindowId = windowData.id;
               searchTargetWindowIds = new Set([activeWindowId]);
               label.contentEditable = true;
@@ -475,14 +860,16 @@ async function renderWindowTabs() {
         renderWindowContent();
       });
 
+      // Append in specific order: Icon -> Label -> Badge -> Close
       tab.appendChild(icon);
       tab.appendChild(label);
+      tab.appendChild(badge); // Insert badge here
       tab.appendChild(closeBtn);
       
       tabsList.appendChild(tab);
     } else {
       label = tab.querySelector('.window-tab-label');
-      // Re-append existing tab to ensure it is in the correct sort order
+      // Re-append existing tab to ensure sort order
       tabsList.appendChild(tab);
     }
 
@@ -498,16 +885,21 @@ async function renderWindowTabs() {
     }
     tab.className = classes.join(' ');
 
+    // --- NEW: DYNAMIC UPDATE CHECK ---
+    // Ensure the badge text always matches the current data source
+    const currentBadge = tab.querySelector('.window-tab-count-badge');
+    if (currentBadge) {
+      currentBadge.textContent = windowData.tabs.length;
+    }
+
   });
 
-  // --- 3. HANDLE NEW WINDOW BUTTON (Append at the end) ---
-  // We check if it exists in the list. If not, create it.
-  // Then we appendChild it, which moves it to the very end of the list.
+  // --- 3. HANDLE NEW WINDOW BUTTON (Same as before) ---
   let newBtn = document.getElementById('newWindowBtn');
   
   if (!newBtn) {
     newBtn = document.createElement('button');
-    newBtn.id = 'newWindowBtn'; // ID ensures we can find it next time
+    newBtn.id = 'newWindowBtn'; 
     newBtn.className = 'window-tab-new-btn';
     newBtn.innerHTML = '✛';
     newBtn.title = 'New window';
@@ -533,10 +925,16 @@ async function renderWindowTabs() {
 function attachTopControls() {
   const controls = document.getElementById('windowControls');
   if (!controls) return;
+  const sessionBtn = document.getElementById('sessionBtn');
   const mergeBtn = document.getElementById('mergeBtn');
   const mergeAllBtn = document.getElementById('mergeAllBtn');
   const splitBtn = document.getElementById('splitBtn');
   controls.setAttribute('aria-hidden', 'false');
+
+  sessionBtn.onclick = async () => {
+    let wrapper = document.getElementById('wrapper');
+    wrapper.classList.toggle('sidebar-open');
+  }
 
   
   mergeBtn.onclick = async () => {

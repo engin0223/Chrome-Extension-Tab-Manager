@@ -7,16 +7,33 @@
     <link rel="stylesheet" href="ui.css" />
   </head>
   <body>
-    <div class="window-viewer-container">
-      <div class="window-tabs-bar">
-        <div id="windowTabsList" class="window-tabs-list"></div>
-        <div id="staticControls" class="static-controls-area"></div>
+    <div id="wrapper">
+      <div id="sidebar">
+        <div class="sidebar-controls">
+            <h2 class="sidebar-title">Saved Sessions</h2>
+            <button id="saveSessionBtn" class="control-btn sidebar-action-btn">
+                <span>+</span> Save Current
+            </button>
+        </div>
+
+        <div id="sidebarContent" class="sidebar-content">
+          <div class="empty-state" style="padding: 20px; font-size: 12px;">
+            Loading sessions...
+          </div>
+        </div>
       </div>
-      <div class="window-controls-bar">
-        <div id="windowControls" class="window-controls" aria-hidden="true">
-          <button id="mergeAllBtn" class="control-btn" title="Merge all windows into this one">Merge All</button>
-          <button id="mergeBtn" class="control-btn" title="Merge from another window">Merge</button>
-          <button id="splitBtn" class="control-btn" title="Split current window">Split</button>
+      
+      <div class="window-viewer-container">
+        <div class="window-tabs-bar">
+          <div id="windowTabsList" class="window-tabs-list"></div>
+          <div id="staticControls" class="static-controls-area"></div>
+        </div>
+        <div class="window-controls-bar">
+          <div id="windowControls" class="window-controls" aria-hidden="true">
+            <button id="sessionBtn" class="control-btn" title="Open your saved sessions">Sessions</button>
+            <button id="mergeAllBtn" class="control-btn" title="Merge all windows into this one">Merge All</button>
+            <button id="mergeBtn" class="control-btn" title="Merge from another window">Merge</button>
+            <button id="splitBtn" class="control-btn" title="Split current window">Split</button>
             <div class="search-wrapper">
               <input type="text" id="tabSearchInput" placeholder="Search tabs..." class="search-box">
               <button id="searchFilterBtn" class="control-btn icon-btn" title="Choose windows to search">
