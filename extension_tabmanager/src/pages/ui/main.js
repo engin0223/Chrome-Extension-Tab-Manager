@@ -27,6 +27,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.tabs.onCreated.addListener(reload);
     chrome.tabs.onRemoved.addListener(reload);
     chrome.tabs.onUpdated.addListener(reload);
+    chrome.tabs.onMoved.addListener(reload); 
+    chrome.tabs.onAttached.addListener(reload);
+    chrome.tabs.onDetached.addListener(reload);
     chrome.windows.onCreated.addListener(reload);
     chrome.windows.onRemoved.addListener(reload);
     
@@ -35,6 +38,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.key === 'Escape') {
             state.clearAllSelections();
             refreshUI();
+        }
+        
+        if (e.key === 'Delete' && state.blueSelection.length > 0) {
+            // 1. Copy IDs because we are about to clear the selection
+            const tabsToRemove = [...state.blueSelection];
+            
+            // 2. Clear selection immediately for visual feedback
+            state.clearAllSelections();
+            refreshUI();
+
+            // 3. Remove the tabs (triggers chrome.tabs.onRemoved -> reload)
+            tabsToRemove.forEach(id => API.closeTab(id));
         }
     });
 
