@@ -42,8 +42,21 @@ export function renderWindowTabs(onClickCallback, onDblClickCallback) {
       label.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
       });
+      
+      // [MODIFIED] Disable contentEditable and clear selection on blur
       label.addEventListener('blur', () => {
         saveWindowName(label.textContent.trim(), windowData.id);
+        label.contentEditable = false;
+        window.getSelection().removeAllRanges();
+      });
+
+      // [ADDED] Click handler to enable editing only when active
+      label.addEventListener('click', (e) => {
+          if (state.activeWindowId === windowData.id) {
+              e.stopPropagation();
+              label.contentEditable = true;
+              label.focus();
+          }
       });
 
       tab.addEventListener('click', (e) => onClickCallback(e, windowData.id, label));
@@ -59,7 +72,7 @@ export function renderWindowTabs(onClickCallback, onDblClickCallback) {
     const classes = ['window-tab'];
     if (windowData.id === state.activeWindowId) {
         classes.push('active');
-        if(!label.isContentEditable) label.contentEditable = true;
+        // [REMOVED] The line that forced contentEditable = true automatically
     } else {
         label.contentEditable = false;
     }
@@ -174,7 +187,6 @@ function createCard(tab, windowId, windowName, onCardClick) {
 
     const fav = document.createElement('img');
     fav.className = 'page-card-favicon';
-    // --- FIX: Use helper for robust favicon loading ---
     fav.src = getFaviconUrl(tab.url);
     
     const title = document.createElement('span');
@@ -229,7 +241,6 @@ function createSplitCard(items, onCardClick) {
         
         const fav = document.createElement('img');
         fav.className = 'page-card-favicon';
-        // --- FIX: Use helper for robust favicon loading ---
         fav.src = getFaviconUrl(tab.url);
         
         const t = document.createElement('span');

@@ -8,6 +8,21 @@ body {
   color: var(--text-primary);
   overflow: hidden;
   transition: background 0.3s, color 0.3s;
+
+  /* Disable text selection globally */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Allow selection explicitly for inputs (Search) and editable elements (Active Window Name) */
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 
 .user-select-none {

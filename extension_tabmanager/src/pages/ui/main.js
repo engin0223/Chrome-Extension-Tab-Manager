@@ -86,7 +86,6 @@ function handleWindowTabClick(e, id, labelEl) {
         if (state.activeWindowId !== id) {
             state.activeWindowId = id;
             state.searchTargetWindowIds = new Set([id]);
-            labelEl.contentEditable = true;
         }
     }
     refreshUI();
