@@ -51,6 +51,29 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 3. Remove the tabs (triggers chrome.tabs.onRemoved -> reload)
             tabsToRemove.forEach(id => API.closeTab(id));
         }
+        
+        if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+            e.preventDefault(); // Prevent default browser "Select All"
+            
+            const cards = document.querySelectorAll('.page-card');
+            let newSelection = [];
+
+            cards.forEach(card => {
+                // Handle split-view cards (multiple tabs) vs single cards
+                if (card.dataset.tabIds) {
+                    try {
+                        const ids = JSON.parse(card.dataset.tabIds);
+                        newSelection.push(...ids);
+                    } catch (err) { /* ignore parse error */ }
+                } else if (card.dataset.tabId) {
+                    newSelection.push(Number(card.dataset.tabId));
+                }
+            });
+
+            // Update state with unique IDs
+            state.blueSelection = [...new Set(newSelection)];
+            refreshUI();
+        }
     });
 
     // 7. Theme Toggle
