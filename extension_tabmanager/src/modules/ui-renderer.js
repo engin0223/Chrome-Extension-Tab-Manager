@@ -267,7 +267,7 @@ function createSplitCard(items, onCardClick) {
 
     card.addEventListener('click', (e) => {
         if(e.target.closest('button')) return;
-        onCardClick(e, tabIds, true); 
+        onCardClick(e, tabIds); 
     });
 
     updateSelectionVisuals(card, tabIds);

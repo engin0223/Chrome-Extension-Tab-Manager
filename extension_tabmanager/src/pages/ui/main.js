@@ -96,7 +96,7 @@ function refreshUI() {
     Renderer.renderWindowContent(handleCardClick);
 }
 
-function handleWindowTabClick(e, id, labelEl) {
+function handleWindowTabClick(e, id) {
     if (e.ctrlKey) {
         // Toggle selection logic for window tabs
         const win = state.windowsData.find(w => w.id === id);
@@ -114,7 +114,7 @@ function handleWindowTabClick(e, id, labelEl) {
     refreshUI();
 }
 
-function handleCardClick(e, tabIds, isSplitGroup = false) {
+function handleCardClick(e, tabIds) {
     if(!Array.isArray(tabIds)) tabIds = [tabIds];
     
     if (state.mergeMode) return; // Ignore selection during merge phases logic handled by buttons usually
