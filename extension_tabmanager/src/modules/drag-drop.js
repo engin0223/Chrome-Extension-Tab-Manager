@@ -382,7 +382,7 @@ const handleMoveDrag = (e) => {
         if (sortedSelection.length) {
           await refreshUiWindowId();
           
-          let offsetIndex = blueTabsBeforePlaceholder; 
+          let offsetIndex = Math.max(0, blueTabsBeforePlaceholder - 1); 
 
           // Loop through selected tabs
           for (const tabId of sortedSelection) {
