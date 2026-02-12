@@ -63,6 +63,28 @@ export async function saveWindowName(name, windowId) {
   await chrome.storage.local.set({ savedWindowNames: state.savedWindowNames });
 }
 
+// --- NEW: Rename Helpers for Sidebar ---
+
+export async function renameSavedSession(sessionId, newName) {
+    const storage = await chrome.storage.local.get({ sessions: [] });
+    const index = storage.sessions.findIndex(s => s.id === sessionId);
+    if (index !== -1) {
+        storage.sessions[index].name = newName;
+        await chrome.storage.local.set({ sessions: storage.sessions });
+    }
+}
+
+export async function renameSavedGroup(groupId, newName) {
+    const storage = await chrome.storage.local.get({ savedGroups: [] });
+    const index = storage.savedGroups.findIndex(g => g.id === groupId);
+    if (index !== -1) {
+        storage.savedGroups[index].title = newName;
+        await chrome.storage.local.set({ savedGroups: storage.savedGroups });
+    }
+}
+
+// ---------------------------------------
+
 export async function createNewWindow() {
     await chrome.windows.create({ state: 'normal' });
     await fetchWindowsAndTabs();

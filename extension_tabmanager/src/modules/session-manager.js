@@ -27,6 +27,41 @@ export function initializeSessionManager() {
             return;
         }
 
+        // --- Rename Logic ---
+        if (e.target.classList.contains('editable-title')) {
+            // Prevent accordion toggle when clicking title to edit
+            e.stopPropagation();
+            e.target.contentEditable = true;
+            e.target.focus();
+            
+            // Add listeners for saving
+            const handleBlur = () => {
+                const newName = e.target.textContent.trim();
+                const sessionEl = e.target.closest('.sidebar-session');
+                const groupEl = e.target.closest('.sidebar-saved-group');
+                
+                if (sessionEl) {
+                    renameSavedSession(sessionEl.dataset.sessionId, newName);
+                } else if (groupEl) {
+                    renameSavedGroup(groupEl.dataset.savedGroupId, newName);
+                }
+                
+                e.target.contentEditable = false;
+                window.getSelection().removeAllRanges();
+            };
+
+            const handleKey = (evt) => {
+                if (evt.key === 'Enter') {
+                    evt.preventDefault();
+                    e.target.blur();
+                }
+            };
+
+            e.target.addEventListener('blur', handleBlur, { once: true });
+            e.target.addEventListener('keydown', handleKey);
+            return;
+        }
+
         // --- Expansion Logic ---
         const sessionHeader = e.target.closest('.sidebar-session-header');
         if (sessionHeader) {
@@ -55,6 +90,7 @@ export function initializeSessionManager() {
         }
     });
 }
+
 
 async function saveCurrentSession() {
     const sessionName = prompt("Enter a name for this session:", `Session ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`);
