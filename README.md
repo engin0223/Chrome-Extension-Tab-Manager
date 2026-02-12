@@ -1,81 +1,107 @@
 # Tab Manager (Chrome extension)
 
-Lightweight Chrome extension to help merge, split, and organize tabs between windows using a compact UI.
-
-This extension provides quick actions to merge and split windows and tabs via the packaged UI (`ui.html`).
+A powerful, lightweight Chrome extension to help organize, merge, split, and save tabs and groups between windows using a comprehensive dashboard UI.
 
 **Key features**
-- **Visual UI** for viewing windows and selecting tabs to merge or split.
-- **Search & Filter**: Quickly find tabs across all or specific windows.
-- **Window Renaming**: Give custom names to your windows for better organization.
-- **Theme Support**: Toggle between Dark and Light modes.
-- **Drag (marquee) selection** and multi-select with Ctrl/Cmd for flexible tab grouping.
-- **One-click merge/split** operations from the UI.
-- **Experimental Drag-and-Drop**: Reorder tabs or move them between windows (enable in Options).
+- **Visual Dashboard**: View all open windows and tabs in a card-based layout.
+- **Session Management**: Save your current window setups as named sessions and restore them later.
+- **Persistent Tab Groups**: Auto-syncs open tab groups and allows you to save/restore groups from the sidebar.
+- **Advanced Search & Filter**: Find tabs by title or URL across all windows or specific selected windows.
+- **Window Organization**: Rename windows, create new ones, or merge entire windows with one click.
+- **Drag & Drop**:
+  - **Marquee Selection**: Drag to select multiple tabs.
+  - **Reorder & Move**: Drag tabs to reorder them or move them between windows (Enable in Options).
+- **Context Menus**: Right-click on groups for quick actions like "Move to New Window", "Ungroup", or "Delete".
+- **Theme Support**: Built-in Dark and Light modes.
 
 **Works with:** Chrome Manifest V3
 
-**Quick install (developer)**
+---
+
+## Installation (Developer Mode)
+
 1. Clone or download this repository.
 2. Open Chrome and go to `chrome://extensions/`.
-3. Enable **Developer mode** (top-right).
-4. Click **Load unpacked** and select the project folder (`extension_tabmanager` inside the repo).
-5. The extension icon should appear in the toolbar. Click the action icon to open the UI.
+3. Enable **Developer mode** (toggle in the top-right corner).
+4. Click **Load unpacked**.
+5. Select the `extension_tabmanager` folder inside the project directory.
+6. The extension icon should appear in your toolbar. Click it to open the dashboard.
 
-**Usage**
--- Click the extension action (toolbar icon) to open the packaged UI (`ui.html`) which shows windows and tabs. All management operations are performed from this UI.
+---
 
-## Detailed Usage — UI controls, clicks and keys
+## Usage Guide
 
-This section explains how to use the packaged UI (`ui.html`) and the meanings of clicks, gestures, and shortcuts.
+Click the extension icon to open the main dashboard (`ui.html`).
 
-### Window List (Sidebar)
-- **Select Window**: Single click to make it the active window and view its tabs.
-- **Rename Window**: Click on the window title (when active) to rename it. Press **Enter** to save.
+### 1. The Sidebar (Sessions & Groups)
+Access saved content by toggling the sidebar button (top-left).
+- **Saved Groups**:
+  - Automatically tracks open groups.
+  - Click "Save Current" to snapshot your current windows as a Session.
+  - **Restore**: Click the restore icon next to a group or session to open it.
+  - **Auto-Sync**: Open groups are automatically synced to storage to prevent data loss.
+
+### 2. Main Dashboard (Windows & Tabs)
 - **Selection**:
-    - **Ctrl/Cmd + Click**: Toggle selection of all tabs in that window.
-    - **Double-click**: Switch to that window and select all its tabs.
-- **New Window**: Click the **+** button at the bottom of the list to create a blank window.
-- **Close Window**: Click the **✕** button to close the window and all its tabs.
+    - **Click**: Select a single tab.
+    - **Ctrl/Cmd + Click**: Add/remove individual tabs from selection.
+    - **Marquee (Drag)**: Click and drag in empty space to select multiple tabs at once.
+    - **Ctrl + A**: Select all tabs.
+- **Window Management**:
+    - **Rename**: Click a window's title tab at the top to rename it.
+    - **Switch**: Click a window tab to view its contents.
+    - **New Window**: Click the **+** button in the tab bar.
 
-### Tab Cards (Main Content)
-- **Selection**:
-	- **Single click**: Select the tab (blue selection).
-	- **Ctrl/Cmd + click**: Toggle selection (add/remove from blue selection).
-- **Marquee Selection**: Click and drag in an empty space to draw a box. Cards touching the box become selected.
-    - Hold **Shift** while dragging to add to the existing selection.
-- **Switch Tab**: Double-click a card to focus that tab in the browser.
-- **Close Tab**: Click the **✕** button on a card to close it.
+### 3. Top Toolbar Actions
+- **Merge**:
+    - *Stage 1*: Select tabs (Source) -> Click Merge.
+    - *Stage 2*: Select tabs (Target) -> Click Merge.
+    - *Stage 3*: Click Merge again to combine them into a new split window.
+- **Merge All**: Consolidates all tabs from all other windows into the current active window.
+- **Split**: Moves currently selected tabs into a brand new window.
+- **Group Selected**: Creates a native Chrome Tab Group from the selected tabs (with color/name picker).
 
-### Top Controls
-- **Search**: Type in the search bar to filter tabs by title or URL.
-    - Click the **Filter icon** next to the search bar to choose which windows to include in the search (All, None, or specific windows).
-- **Theme Toggle**: Click the **🌓** icon to switch between Light and Dark themes.
-- **Merge Actions**:
-	- `Merge` (multi-stage):
-		1. **Stage 1**: Select tabs (blue) to be the *source*, then click `Merge` (turns red).
-		2. **Stage 2**: Select tabs (blue) to be the *target* group, then click `Merge` (turns yellow).
-		3. **Stage 3**: Click `Merge` again to execute. A new window is created combining the source and target groups.
-	- `Merge All`: Moves all tabs from *other* windows into the currently active window.
-	- `Split`: Moves the currently selected tabs (blue) into a newly created window.
+### 4. Search
+- Type in the search bar to filter tabs instantly.
+- Click the **Filter icon** to toggle which windows are included in the search results.
 
-### Keyboard Shortcuts
-- `Escape`: Clear all selections and exit merge mode.
-- `Delete`: Close the currently selected tabs.
-- `Enter`: Save window name (while renaming).
+### 5. Context Menus
+- **Right-click** on a tab group or split-view card to access specific actions:
+    - New tab in group
+    - Move group to new window
+    - Ungroup
+    - Close/Delete group
 
-### Experimental Features (Options)
-Right-click the extension icon and select **Options** to enable experimental features:
-- **Enable Move Tabs**: When checked, you can drag selected tabs (blue) to reorder them or drop them onto another window in the sidebar to move them instantly.
+---
 
-## Files of interest
-- `manifest.json` — Extension metadata and permissions (Manifest V3).
-- `background.js` — Service worker; opens the packaged UI.
-- `ui.html`, `ui.js`, `ui.css` — The main interface for managing tabs.
-- `options.html`, `options.js` — Settings page for feature flags.
+## Configuration & Options
+Right-click the extension icon in the toolbar and select **Options**.
+- **Enable Drag-and-Drop Move**: Allows you to physically drag selected tabs to different windows or reorder them within the list.
 
-**Permissions required**
-- `tabs` — To move, query, and close tabs.
-- `windows` — To create and manage browser windows.
-- `storage` — To save custom window names and settings.
-- `favicon` — To display tab icons.
+---
+
+## Project Structure
+
+This extension uses a modular JavaScript architecture.
+
+- `manifest.json`: Configuration and permissions.
+- `src/background/`:
+  - `service-worker.js`: Handles background events and opens the main UI.
+- `src/modules/`: Core logic libraries.
+  - `api.js`: Wrappers for Chrome APIs (Windows, Tabs, Groups).
+  - `store.js`: Central state management.
+  - `session-manager.js`: Logic for saving/restoring sessions and groups.
+  - `drag-drop.js`: Drag-and-drop interaction logic.
+  - `ui-renderer.js`: Generates the HTML for cards and lists.
+- `src/pages/`:
+  - `ui/`: Main dashboard files (`ui.html`, `main.js`).
+  - `options/`: Settings page.
+- `src/assets/`: Styles (CSS) and images.
+
+## Permissions
+
+- `tabs`: To access title, URL, and manipulate tab state.
+- `windows`: To create, close, and focus windows.
+- `tabGroups`: To query, save, and restore tab groups.
+- `storage`: To persist saved sessions, window names, and user preferences.
+- `favicon`: To display favicons for tabs.
