@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4. Attach Event Listeners
     setupTopControls();
     setupSearch();
+    setupContextMenu(); 
     initializeSessionManager();
     attachDragHandlers(document.getElementById('windowContent'), refreshUI);
     
@@ -40,55 +41,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 6. Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
+        // Escape: Close modals and clear selection
         if (e.key === 'Escape') {
+            document.getElementById('groupModalOverlay').classList.remove('visible');
+            document.getElementById('groupContextMenu').style.display = 'none';
             state.clearAllSelections();
             refreshUI();
+            
+            // Also blur any active editable elements
+            if (document.activeElement && document.activeElement.isContentEditable) {
+                document.activeElement.blur();
+            }
         }
         
+        // Delete: Remove selected tabs (but not if editing text)
         if (e.key === 'Delete' && state.blueSelection.length > 0) {
-            // 1. Copy IDs because we are about to clear the selection
-            const tabsToRemove = [...state.blueSelection];
+            if (e.target.isContentEditable || e.target.tagName === 'INPUT') return;
             
-            // 2. Clear selection immediately for visual feedback
+            const tabsToRemove = [...state.blueSelection];
             state.clearAllSelections();
             refreshUI();
-
-            // 3. Remove the tabs (triggers chrome.tabs.onRemoved -> reload)
             tabsToRemove.forEach(id => API.closeTab(id));
         }
         
+        // Ctrl+A: Select All Cards
         if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
-            e.preventDefault(); // Prevent default browser "Select All"
+            // CHECK: If user is editing text, let default browser behavior happen (select text)
+            if (e.target.isContentEditable || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            e.preventDefault(); // Prevent default browser "Select All" for the page body
             
             const cards = document.querySelectorAll('.page-card');
             let newSelection = [];
-
             cards.forEach(card => {
-                // Handle split-view cards (multiple tabs) vs single cards
                 if (card.dataset.tabIds) {
-                    try {
-                        const ids = JSON.parse(card.dataset.tabIds);
-                        newSelection.push(...ids);
-                    } catch (err) { /* ignore parse error */ }
+                    try { newSelection.push(...JSON.parse(card.dataset.tabIds)); } catch (err) {}
                 } else if (card.dataset.tabId) {
                     newSelection.push(Number(card.dataset.tabId));
                 }
             });
-
-            // Update state with unique IDs
             state.blueSelection = [...new Set(newSelection)];
             refreshUI();
         }
     });
 
-    // 7. Theme Toggle
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'window-tab-theme-toggle-btn';
-    toggleBtn.innerHTML = `
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(0deg);">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-      </svg>
-    `;
+    toggleBtn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
     toggleBtn.title = 'Toggle light/dark theme';
     toggleBtn.onclick = () => document.body.classList.toggle('light-theme');
     document.getElementById('staticControls').appendChild(toggleBtn);
@@ -98,7 +99,65 @@ function refreshUI() {
     Renderer.renderWindowTabs(handleWindowTabClick, (id) => {
         API.activateTab(id, state.windowsData.find(w=>w.id===id).tabs[0].id);
     });
-    Renderer.renderWindowContent(handleCardClick);
+    Renderer.renderWindowContent(handleCardClick, handleContextMenu);
+}
+
+let activeContextMenuGroupId = null;
+
+function handleContextMenu({ x, y, groupId }) {
+    activeContextMenuGroupId = groupId;
+    const menu = document.getElementById('groupContextMenu');
+    menu.style.display = 'block';
+    
+    const menuRect = menu.getBoundingClientRect();
+    let left = x, top = y;
+    if (x + menuRect.width > window.innerWidth) left = window.innerWidth - menuRect.width - 10;
+    if (y + menuRect.height > window.innerHeight) top = window.innerHeight - menuRect.height - 10;
+    
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function setupContextMenu() {
+    const menu = document.getElementById('groupContextMenu');
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target)) menu.style.display = 'none';
+    });
+
+    document.getElementById('ctxNewTabInGroup').onclick = async () => {
+        if (activeContextMenuGroupId !== null) await API.addTabToGroup(activeContextMenuGroupId);
+        menu.style.display = 'none';
+        await API.fetchWindowsAndTabs(); refreshUI();
+    };
+    document.getElementById('ctxMoveGroupToWindow').onclick = async () => {
+        if (activeContextMenuGroupId !== null) await API.moveGroupToNewWindow(activeContextMenuGroupId);
+        menu.style.display = 'none';
+        await API.fetchWindowsAndTabs(); refreshUI();
+    };
+    document.getElementById('ctxCloseGroup').onclick = async () => {
+        if (activeContextMenuGroupId !== null) {
+            await API.closeGroupTabs(activeContextMenuGroupId);
+        }
+        menu.style.display = 'none';
+        await API.fetchWindowsAndTabs(); refreshUI();
+    };
+    document.getElementById('ctxUngroup').onclick = async () => {
+        if (activeContextMenuGroupId !== null) await API.ungroupTabs(activeContextMenuGroupId);
+        menu.style.display = 'none';
+        await API.fetchWindowsAndTabs(); refreshUI();
+    };
+    document.getElementById('ctxDeleteGroup').onclick = async () => {
+        if (activeContextMenuGroupId !== null) {
+             if(confirm("Permanently delete this group from Saved Groups?")) {
+                 const storage = await chrome.storage.local.get({ groupMappings: {} });
+                 const savedId = storage.groupMappings[activeContextMenuGroupId];
+                 if(savedId) await API.deleteSavedGroup(savedId);
+                 else await API.closeGroupTabs(activeContextMenuGroupId);
+             }
+        }
+        menu.style.display = 'none';
+        await API.fetchWindowsAndTabs(); refreshUI();
+    };
 }
 
 function handleWindowTabClick(e, id) {

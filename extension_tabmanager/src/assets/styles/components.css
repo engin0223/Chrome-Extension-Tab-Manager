@@ -368,3 +368,36 @@
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .btn-primary { background: var(--accent-blue); color: white; border: none; }
 .btn-primary:hover { background: #006bb3; }
+
+/* --- Context Menu (Right Click) --- */
+.context-menu {
+  position: fixed; z-index: 4000; display: none;
+  background-color: #292a2d; /* Chrome Dark Menu Color */
+  border: 1px solid #4a4c50;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  padding: 6px 0; min-width: 220px;
+}
+
+.context-menu-item {
+  display: flex; align-items: center;
+  padding: 6px 16px;
+  font-size: 13px; color: #e8eaed;
+  cursor: pointer; user-select: none;
+  gap: 12px;
+}
+
+.context-menu-item:hover {
+  background-color: #3c4043;
+}
+
+.context-menu-item .menu-icon {
+  width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; opacity: 0.8;
+}
+
+.context-menu-item .menu-label { flex: 1; }
+.context-menu-item .menu-shortcut { color: #9aa0a6; font-size: 11px; margin-left: 8px; }
+
+.context-menu-separator {
+  height: 1px; background-color: #4a4c50; margin: 4px 0;
+}

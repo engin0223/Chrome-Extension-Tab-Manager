@@ -1,6 +1,19 @@
 import { state } from './store.js';
 import { saveWindowName, closeWindow, createNewWindow, closeTab, activateTab } from './api.js';
 
+// Map Chrome tab group color names to CSS colors
+const GROUP_COLORS = {
+  grey: '#bdc1c6',
+  blue: '#8ab4f8',
+  red: '#f28b82',
+  yellow: '#fdd663',
+  green: '#81c995',
+  pink: '#ff8bcb',
+  purple: '#c58af9',
+  cyan: '#78d9ec',
+  orange: '#fcad70'
+};
+
 export function renderWindowTabs(onClickCallback, onDblClickCallback) {
   const tabsList = document.getElementById('windowTabsList');
   const validWindowIds = new Set(state.windowsData.map(w => w.id));
@@ -101,7 +114,8 @@ export function renderWindowTabs(onClickCallback, onDblClickCallback) {
   }
 }
 
-export function renderWindowContent(onCardClick) {
+// CHANGED: Added onContextMenu callback
+export function renderWindowContent(onCardClick, onContextMenu) {
   const contentArea = document.getElementById('windowContent');
   const searchInput = document.getElementById('tabSearchInput');
   const filterTerm = searchInput ? searchInput.value.toLowerCase() : '';
@@ -149,14 +163,11 @@ export function renderWindowContent(onCardClick) {
   });
 
   groups.forEach(g => {
-    if (g.type === 'split') contentArea.appendChild(createSplitCard(g.items, onCardClick));
-    else contentArea.appendChild(createCard(g.item.tab, g.item.windowId, g.item.windowName, onCardClick));
+    if (g.type === 'split') contentArea.appendChild(createSplitCard(g.items, onCardClick, onContextMenu));
+    else contentArea.appendChild(createCard(g.item.tab, g.item.windowId, g.item.windowName, onCardClick, onContextMenu));
   });
 }
 
-/**
- * Helper to generate the correct Favicon URL using chrome.runtime
- */
 function getFaviconUrl(pageUrl) {
     if (!pageUrl) return 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="%23999"/></svg>';
     try {
@@ -169,11 +180,46 @@ function getFaviconUrl(pageUrl) {
     }
 }
 
-function createCard(tab, windowId, windowName, onCardClick) {
+// CHANGED: Helper to handle right-click on cards
+function attachContextMenu(element, groupId, onContextMenu) {
+    if (groupId > -1 && onContextMenu) {
+        element.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onContextMenu({ x: e.clientX, y: e.clientY, groupId });
+        });
+    }
+}
+
+function createCard(tab, windowId, windowName, onCardClick, onContextMenu) {
     const card = document.createElement('div');
     card.className = 'page-card';
     card.dataset.tabId = tab.id;
     card.dataset.windowId = windowId;
+
+    // Apply Group Visuals
+    if (tab.groupId > -1) {
+      const group = state.tabGroups.find(g => g.id === tab.groupId);
+      if (group) {
+        const color = GROUP_COLORS[group.color] || group.color;
+        card.style.borderLeft = `5px solid ${color}`;
+        
+        // Optional: Add a group label
+        if (group.title) {
+            const groupBadge = document.createElement('div');
+            groupBadge.textContent = group.title;
+            groupBadge.style.cssText = `
+                position: absolute; top: 0; left: 0; background: ${color}; 
+                color: #222; font-size: 9px; padding: 2px 6px; 
+                border-bottom-right-radius: 4px; font-weight: bold; z-index: 10;
+            `;
+            card.appendChild(groupBadge);
+        }
+      }
+    }
+
+    // Attach Context Menu Handler
+    attachContextMenu(card, tab.groupId, onContextMenu);
 
     const header = document.createElement('div');
     header.className = 'page-card-header';
@@ -217,13 +263,17 @@ function createCard(tab, windowId, windowName, onCardClick) {
     return card;
 }
 
-function createSplitCard(items, onCardClick) {
+function createSplitCard(items, onCardClick, onContextMenu) {
     const card = document.createElement('div');
     card.className = 'page-card split-view-card';
     const tabIds = items.map(i => i.tab.id);
     card.dataset.tabIds = JSON.stringify(tabIds);
     card.dataset.windowId = items[0].windowId;
     card.dataset.tabId = tabIds[0];
+
+    // Check if the group ID is common (using first tab's group for context menu)
+    const primaryGroupId = items[0].tab.groupId;
+    attachContextMenu(card, primaryGroupId, onContextMenu);
 
     const closeGroup = document.createElement('button');
     closeGroup.className = 'split-group-close-btn';
@@ -234,6 +284,16 @@ function createSplitCard(items, onCardClick) {
     items.forEach(({ tab, windowId }) => {
         const pane = document.createElement('div');
         pane.className = 'split-pane';
+        
+        // Apply Group Visuals to individual pane
+        if (tab.groupId > -1) {
+            const group = state.tabGroups.find(g => g.id === tab.groupId);
+            if (group) {
+                const color = GROUP_COLORS[group.color] || group.color;
+                pane.style.borderLeft = `4px solid ${color}`;
+            }
+        }
+
         pane.addEventListener('dblclick', (e) => { e.stopPropagation(); activateTab(windowId, tab.id); });
         
         const h = document.createElement('div');
