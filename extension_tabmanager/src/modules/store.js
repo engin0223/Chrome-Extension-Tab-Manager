@@ -10,6 +10,9 @@ class Store {
     this.uiWindowId = null; // Window ID where the UI is currently open
     this.savedWindowNames = {}; // Map of windowId to saved name for renaming purposes
     
+    // New: Store Tab Groups Data
+    this.tabGroups = [];
+
     // Selection State
     this.blueSelection = []; // Current selection (tab IDs)
     this.redSelection = [];  // Merge source
@@ -22,6 +25,11 @@ class Store {
 
   setWindows(data) {
     this.windowsData = data;
+  }
+
+  // New: Setter for Tab Groups
+  setTabGroups(groups) {
+    this.tabGroups = groups;
   }
 
   getActiveWindowId() {

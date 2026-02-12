@@ -4,6 +4,11 @@ import * as Renderer from '../../modules/ui-renderer.js';
 import { initializeSessionManager } from '../../modules/session-manager.js';
 import { attachDragHandlers } from '../../modules/drag-drop.js';
 
+const COLOR_MAP = {
+  grey: '#bdc1c6', blue: '#8ab4f8', red: '#f28b82', yellow: '#fdd663',
+  green: '#81c995', pink: '#ff8bcb', purple: '#c58af9', cyan: '#78d9ec', orange: '#fcad70'
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
     // 1. Setup Theme & Basic Config
     document.body.classList.toggle('light-theme', window.matchMedia('(prefers-color-scheme: light)').matches);
@@ -116,8 +121,7 @@ function handleWindowTabClick(e, id) {
 
 function handleCardClick(e, tabIds) {
     if(!Array.isArray(tabIds)) tabIds = [tabIds];
-    
-    if (state.mergeMode) return; // Ignore selection during merge phases logic handled by buttons usually
+    if (state.mergeMode) return; 
 
     if (e.ctrlKey || e.metaKey) {
         const allSelected = tabIds.every(id => state.blueSelection.includes(id));
@@ -130,13 +134,10 @@ function handleCardClick(e, tabIds) {
 }
 
 function setupTopControls() {
-    document.getElementById('sessionBtn').onclick = () => {
-        document.getElementById('wrapper').classList.toggle('sidebar-open');
-    };
+    document.getElementById('sessionBtn').onclick = () => document.getElementById('wrapper').classList.toggle('sidebar-open');
 
     document.getElementById('mergeBtn').onclick = async () => {
         if (state.blueSelection.length === 0 && state.mergeMode !== 'yellow') return alert('No tabs selected');
-
         if (state.mergeMode === null) {
             state.redSelection = [...state.blueSelection];
             state.blueSelection = [];
@@ -148,7 +149,7 @@ function setupTopControls() {
             
             // Execute Merge
             const combined = [...state.redSelection, ...state.yellowSelection];
-            const newWin = await API.createSplitWindow(combined);
+            await API.createSplitWindow(combined);
             state.clearAllSelections();
             await API.fetchWindowsAndTabs();
         }
@@ -166,12 +167,60 @@ function setupTopControls() {
     document.getElementById('mergeAllBtn').onclick = async () => {
         const target = state.activeWindowId;
         for (const w of state.windowsData) {
-            if (w.id !== target) {
-                await API.moveTabs(w.tabs.map(t=>t.id), target);
-            }
+            if (w.id !== target) await API.moveTabs(w.tabs.map(t=>t.id), target);
         }
         await API.fetchWindowsAndTabs();
         refreshUI();
+    };
+
+    const groupBtn = document.getElementById('groupBtn');
+    const modal = document.getElementById('groupModalOverlay');
+    const colorContainer = document.getElementById('colorPickerContainer');
+    const nameInput = document.getElementById('groupNameInput');
+    let selectedColor = 'grey';
+
+    colorContainer.innerHTML = '';
+    Object.entries(COLOR_MAP).forEach(([name, hex]) => {
+        const swatch = document.createElement('div');
+        swatch.className = 'color-swatch';
+        swatch.style.backgroundColor = hex;
+        swatch.dataset.colorName = name;
+        swatch.onclick = () => {
+            document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+            swatch.classList.add('selected');
+            selectedColor = name;
+        };
+        colorContainer.appendChild(swatch);
+    });
+
+    groupBtn.onclick = () => {
+        if (!state.blueSelection.length) return alert("Select tabs to group");
+        nameInput.value = '';
+        selectedColor = 'grey';
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+        const greySwatch = colorContainer.querySelector('[data-color-name="grey"]');
+        if (greySwatch) greySwatch.classList.add('selected');
+        modal.classList.add('visible');
+        nameInput.focus();
+    };
+
+    document.getElementById('cancelGroupBtn').onclick = () => modal.classList.remove('visible');
+    document.getElementById('confirmGroupBtn').onclick = async () => {
+        try {
+            const groupName = nameInput.value.trim();
+            const groupId = await chrome.tabs.group({ tabIds: state.blueSelection });
+            if (chrome.tabGroups) {
+                await chrome.tabGroups.update(groupId, { title: groupName, color: selectedColor });
+            }
+            state.clearAllSelections();
+            modal.classList.remove('visible');
+            await API.fetchWindowsAndTabs();
+            refreshUI();
+        } catch (e) {
+            console.error(e);
+            alert("Failed to group tabs. " + e.message);
+            modal.classList.remove('visible');
+        }
     };
 }
 
@@ -179,11 +228,9 @@ function setupSearch() {
     const btn = document.getElementById('searchFilterBtn');
     const menu = document.getElementById('searchFilterMenu');
     const list = document.getElementById('filterWindowList');
-    
     btn.onclick = (e) => {
         e.stopPropagation();
         menu.classList.toggle('visible');
-        
         list.innerHTML = '';
         state.windowsData.forEach(w => {
             const div = document.createElement('div');
@@ -200,12 +247,10 @@ function setupSearch() {
             list.appendChild(div);
         });
     };
-    
     document.getElementById('tabSearchInput').addEventListener('input', refreshUI);
     document.addEventListener('click', (e) => {
         if (!menu.contains(e.target) && e.target !== btn) menu.classList.remove('visible');
     });
-    
     document.getElementById('filterSelectAll').onclick = () => {
         state.windowsData.forEach(w => state.searchTargetWindowIds.add(w.id));
         refreshUI();

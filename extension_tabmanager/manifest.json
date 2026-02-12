@@ -3,7 +3,7 @@
   "name": "Tab Manager",
   "version": "0.5.0",
   "description": "Organize, merge, and split tabs between windows.",
-  "permissions": ["tabs", "windows", "storage", "favicon"],
+  "permissions": ["tabs", "windows", "storage", "favicon", "tabGroups"],
   "background": {
     "service_worker": "src/background/service-worker.js"
   },
