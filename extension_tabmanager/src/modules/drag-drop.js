@@ -46,12 +46,23 @@ export function attachDragHandlers(container, refreshCallback) {
     }
   };
 
-  // Helper to get selected IDs sorted by their actual DOM order (visual order)
+// Helper to get selected IDs sorted by their actual DOM order (visual order)
   const getSortedSelection = () => {
     const allCards = Array.from(container.querySelectorAll('.page-card'));
-    return allCards
-      .map(card => Number(card.dataset.tabId))
-      .filter(id => state.blueSelection.includes(id));
+    const selectedTabs = [];
+    allCards.forEach(card => {
+      const id = Number(card.dataset.tabId);
+      if (state.blueSelection.includes(id)) {
+        if (card.dataset.tabIds) {
+          // If it's a split card, get all tabs in it
+          try { selectedTabs.push(...JSON.parse(card.dataset.tabIds)); } catch(e){}
+        } else {
+          // Standard card
+          selectedTabs.push(id);
+        }
+      }
+    });
+    return selectedTabs;
   };
 
   const createGhost = (e) => {
@@ -210,15 +221,15 @@ const handleMoveDrag = (e) => {
           const shouldInsertAfter = forceInsertAfter || isBottomHalf;
 
           // C. CALCULATE FINAL INDEX
-          // If inserting after, we add 1 to the clean index.
-          // Example: List [A, B], Target A (idx 0). Insert After -> Index 1. 
-          // Result: [A, (New), B]
-          dragState.insertIndex = shouldInsertAfter ? cleanIndex + 1 : cleanIndex;
-
-          console.log(dragState.insertIndex);
+          // NEW: If inserting after a split card, ensure we skip ALL its internal tabs!
+          let tabsInTargetCard = 1;
+          if (card.dataset.tabIds) {
+             try { tabsInTargetCard = JSON.parse(card.dataset.tabIds).length; } catch(e) {}
+          }
+          
+          dragState.insertIndex = shouldInsertAfter ? cleanIndex + tabsInTargetCard : cleanIndex;
 
           // D. UPDATE PLACEHOLDER VISUALLY
-          // We still use the DOM element 'card' for visual placement
           updatePlaceholder(card, shouldInsertAfter);
         }
       }
@@ -303,7 +314,13 @@ const handleMoveDrag = (e) => {
           if (sibling.classList.contains('page-card')) {
              const tId = Number(sibling.dataset.tabId);
              if (state.blueSelection.includes(tId)) {
-               blueTabsBeforePlaceholder++;
+               // Count ALL tabs inside this card if it's a split view
+               if (sibling.dataset.tabIds) {
+                 try { blueTabsBeforePlaceholder += JSON.parse(sibling.dataset.tabIds).length; } 
+                 catch(e) { blueTabsBeforePlaceholder++; }
+               } else {
+                 blueTabsBeforePlaceholder++;
+               }
              }
           }
           sibling = sibling.previousElementSibling;
@@ -369,7 +386,7 @@ const handleMoveDrag = (e) => {
         if (card) targetWinId = Number(card.dataset.windowId);
         else if (winBtn) targetWinId = Number(winBtn.dataset.windowId);
 
-        // 2. FIX: Handle Fast Drop (Determine Index)
+        // 2. Determine Index
         let finalInsertIndex = dragState.insertIndex;
 
         if (winBtn && !card) {
@@ -383,10 +400,62 @@ const handleMoveDrag = (e) => {
           await refreshUiWindowId();
           
           let offsetIndex = Math.max(0, blueTabsBeforePlaceholder - 1); 
+          let targetAbsoluteIndex = finalInsertIndex + offsetIndex;
+          let targetCleanIndex = finalInsertIndex;
 
-          // Loop through selected tabs
-          for (const tabId of sortedSelection) {
-            await moveTabs([tabId], targetWinId, finalInsertIndex + offsetIndex);
+          if (targetWinId === state.activeWindowId) {
+             // --- ARC SPLIT VIEW PRESERVATION (Same Window) ---
+             const targetWinData = state.windowsData.find(w => w.id === targetWinId);
+             const currentIds = targetWinData.tabs.map(t => t.id);
+             
+             // Identify all split tabs in this window (from DOM)
+             const splitTabIds = new Set();
+             container.querySelectorAll('.page-card.split-view-card').forEach(c => {
+               if (Number(c.dataset.windowId) === targetWinId) {
+                 try { JSON.parse(c.dataset.tabIds).forEach(id => splitTabIds.add(id)); } catch(e){}
+               }
+             });
+
+             const firstSelIdx = currentIds.indexOf(sortedSelection[0]);
+             const lastSelIdx = currentIds.indexOf(sortedSelection[sortedSelection.length - 1]);
+             const isContiguous = (lastSelIdx - firstSelIdx + 1) === sortedSelection.length;
+             
+             if (isContiguous) {
+                 const cleanTabsIds = currentIds.filter(id => !sortedSelection.includes(id));
+                 const originalCleanIndex = firstSelIdx; 
+                 
+                 let jumpedTabs = [];
+                 let jumpDestIndex = 0;
+                 
+                 if (targetCleanIndex > originalCleanIndex) {
+                     // Dragging DOWN: move jumped tabs UP
+                     jumpedTabs = cleanTabsIds.slice(originalCleanIndex, targetCleanIndex);
+                     jumpDestIndex = firstSelIdx;
+                 } else if (targetCleanIndex < originalCleanIndex) {
+                     // Dragging UP: move jumped tabs DOWN
+                     jumpedTabs = cleanTabsIds.slice(targetCleanIndex, originalCleanIndex);
+                     jumpDestIndex = lastSelIdx + 1;
+                 }
+
+                 // Check if the dragged items OR the jumped items contain a split view
+                 const selectionHasSplit = sortedSelection.some(id => splitTabIds.has(id));
+                 const jumpedHasSplit = jumpedTabs.some(id => splitTabIds.has(id));
+
+                 // Decide which set to move to preserve split views
+                 if (selectionHasSplit && !jumpedHasSplit && jumpedTabs.length > 0) {
+                     // Move the jumped normal tabs (Reverse-Move) to protect the dragged split tabs
+                     await moveTabs(jumpedTabs, targetWinId, jumpDestIndex);
+                 } else {
+                     // Standard Move: The dragged items are normal tabs, OR both sets have split tabs
+                     await moveTabs(sortedSelection, targetWinId, targetAbsoluteIndex);
+                 }
+             } else {
+                 // Fallback for non-contiguous multi-selections
+                 await moveTabs(sortedSelection, targetWinId, targetAbsoluteIndex);
+             }
+          } else {
+             // --- CROSS WINDOW MOVE ---
+             await moveTabs(sortedSelection, targetWinId, targetAbsoluteIndex);
           }
 
           setTimeout(() => {
