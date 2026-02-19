@@ -271,7 +271,6 @@ function getColorHex(colorName) {
 async function restoreSession(id) {
     const storage = await chrome.storage.local.get({ sessions: [] });
     const session = storage.sessions.find(s => s.id === id);
-    if (!session || !confirm(`Restore "${session.name}"?`)) return;
 
     for (const winData of session.windows) {
         if (!winData.tabs.length) continue;
@@ -294,10 +293,8 @@ async function handleRestoreGroupClick(savedGroupId) {
     const storage = await chrome.storage.local.get({ savedGroups: [] });
     const groupData = storage.savedGroups.find(g => g.id === savedGroupId);
     if(groupData) {
-        if(confirm(`Restore group "${groupData.title}"?`)) {
-            await restoreGroup(groupData);
-            setTimeout(fetchWindowsAndTabs, 500);
-        }
+        await restoreGroup(groupData);
+        setTimeout(fetchWindowsAndTabs, 500);
     }
 }
 

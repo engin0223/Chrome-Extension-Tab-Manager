@@ -190,12 +190,9 @@ export async function restoreGroup(groupData) {
     if (!groupData.tabs.length) return;
 
     await chrome.storage.local.set({ pendingRestoreId: groupData.id });
-
-    const firstTabUrl = groupData.tabs[0].url;
-    const newTab = await chrome.tabs.create({ url: firstTabUrl, active: true });
     
-    const tabIds = [newTab.id];
-    for (let i = 1; i < groupData.tabs.length; i++) {
+    const tabIds = [];
+    for (let i = 0; i < groupData.tabs.length; i++) {
         const t = await chrome.tabs.create({ url: groupData.tabs[i].url, active: false });
         tabIds.push(t.id);
     }
