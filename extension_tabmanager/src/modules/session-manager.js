@@ -274,7 +274,7 @@ async function restoreSession(id) {
 
     for (const winData of session.windows) {
         if (!winData.tabs.length) continue;
-        const newWin = await chrome.windows.create({ url: winData.tabs[0].url, focused: false });
+        const newWin = await chrome.windows.create({ url: winData.tabs[0].url, focused: false, state: 'minimized' });
         for (let i = 1; i < winData.tabs.length; i++) {
             await chrome.tabs.create({ windowId: newWin.id, url: winData.tabs[i].url, active: false });
         }

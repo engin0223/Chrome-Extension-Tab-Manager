@@ -99,7 +99,7 @@ export async function renameSavedGroup(groupId, newName) {
 // ---------------------------------------
 
 export async function createNewWindow() {
-    await chrome.windows.create({ state: 'normal' });
+    await chrome.windows.create({ state: 'minimized' });
     await fetchWindowsAndTabs();
 }
 
@@ -139,7 +139,7 @@ export async function moveTabs(tabIds, targetWindowId, index = -1) {
 
 export async function createSplitWindow(tabIds) {
     const firstId = tabIds.shift();
-    const newWin = await chrome.windows.create({ tabId: firstId, state: 'normal' });
+    const newWin = await chrome.windows.create({ tabId: firstId, state: 'minimized' });
     if (tabIds.length > 0) {
         await chrome.tabs.move(tabIds, { windowId: newWin.id, index: -1 });
     }
@@ -182,7 +182,7 @@ export async function moveGroupToNewWindow(groupId) {
     const first = tabs[0];
     const rest = tabs.slice(1);
     
-    const newWin = await chrome.windows.create({ tabId: first.id });
+    const newWin = await chrome.windows.create({ tabId: first.id, state: 'minimized' });
     
     if(rest.length) {
         await chrome.tabs.move(rest.map(t=>t.id), { windowId: newWin.id, index: -1 });
