@@ -195,6 +195,47 @@ function handleCardClick(e, tabIds) {
 function setupTopControls() {
     document.getElementById('sessionBtn').onclick = () => document.getElementById('wrapper').classList.toggle('sidebar-open');
 
+    // --- MERGE ALL (WITH GROUP INTEGRITY) ---
+    document.getElementById('mergeAllBtn').onclick = async () => {
+        const target = state.activeWindowId;
+
+        // 1. Collect all groups from other windows
+        const groupsToRegroup = [];
+        for (const w of state.windowsData) {
+            if (w.id !== target) {
+                const groupMap = {};
+                for (const t of w.tabs) {
+                    if (t.groupId > -1) {
+                        if (!groupMap[t.groupId]) groupMap[t.groupId] = [];
+                        groupMap[t.groupId].push(t.id);
+                    }
+                }
+                for (const [gIdStr, tabIds] of Object.entries(groupMap)) {
+                    const gId = Number(gIdStr);
+                    const gMeta = state.tabGroups.find(g => g.id === gId);
+                    groupsToRegroup.push({ tabIds, color: gMeta ? gMeta.color : 'grey', title: gMeta ? gMeta.title : '' });
+                }
+            }
+        }
+
+        // 2. Move tabs
+        for (const w of state.windowsData) {
+            if (w.id !== target) await API.moveTabs(w.tabs.map(t=>t.id), target);
+        }
+
+        // 3. Regroup in target window
+        for (const g of groupsToRegroup) {
+            try {
+                const newGroupId = await chrome.tabs.group({ tabIds: g.tabIds, createProperties: { windowId: target } });
+                if (chrome.tabGroups) await chrome.tabGroups.update(newGroupId, { title: g.title, color: g.color });
+            } catch (err) { console.error("Regroup failed", err); }
+        }
+
+        await API.fetchWindowsAndTabs();
+        refreshUI();
+    };
+
+    // --- MERGE SELECTED (WITH GROUP INTEGRITY) ---
     document.getElementById('mergeBtn').onclick = async () => {
         if (state.blueSelection.length === 0 && state.mergeMode !== 'yellow') return alert('No tabs selected');
         if (state.mergeMode === null) {
@@ -208,30 +249,76 @@ function setupTopControls() {
             
             // Execute Merge
             const combined = [...state.redSelection, ...state.yellowSelection];
-            await API.createSplitWindow(combined);
+
+            const groupsToRegroup = [];
+            const draggedGroups = {};
+            for (const win of state.windowsData) {
+                for (const t of win.tabs) {
+                    if (combined.includes(t.id) && t.groupId > -1) {
+                        if (!draggedGroups[t.groupId]) draggedGroups[t.groupId] = [];
+                        draggedGroups[t.groupId].push(t.id);
+                    }
+                }
+            }
+
+            for (const [gIdStr, tabIds] of Object.entries(draggedGroups)) {
+                const gId = Number(gIdStr);
+                const gMeta = state.tabGroups.find(g => g.id === gId);
+                groupsToRegroup.push({ tabIds, color: gMeta ? gMeta.color : 'grey', title: gMeta ? gMeta.title : '' });
+            }
+
+            const newWin = await API.createSplitWindow([...combined]);
+
+            for (const g of groupsToRegroup) {
+                try {
+                    const newGroupId = await chrome.tabs.group({ tabIds: g.tabIds, createProperties: { windowId: newWin.id } });
+                    if (chrome.tabGroups) await chrome.tabGroups.update(newGroupId, { title: g.title, color: g.color });
+                } catch(err) {}
+            }
+
             state.clearAllSelections();
             await API.fetchWindowsAndTabs();
+            refreshUI();
         }
         refreshUI();
     };
 
+    // --- SPLIT WINDOW (WITH GROUP INTEGRITY) ---
     document.getElementById('splitBtn').onclick = async () => {
         if (!state.blueSelection.length) return alert("Select tabs");
-        await API.createSplitWindow([...state.blueSelection]);
+        const selection = [...state.blueSelection];
+        
+        const groupsToRegroup = [];
+        const draggedGroups = {};
+        for (const win of state.windowsData) {
+            for (const t of win.tabs) {
+                if (selection.includes(t.id) && t.groupId > -1) {
+                    if (!draggedGroups[t.groupId]) draggedGroups[t.groupId] = [];
+                    draggedGroups[t.groupId].push(t.id);
+                }
+            }
+        }
+
+        for (const [gIdStr, tabIds] of Object.entries(draggedGroups)) {
+            const gId = Number(gIdStr);
+            const gMeta = state.tabGroups.find(g => g.id === gId);
+            groupsToRegroup.push({ tabIds, color: gMeta ? gMeta.color : 'grey', title: gMeta ? gMeta.title : '' });
+        }
+
+        const newWin = await API.createSplitWindow([...selection]);
+        
+        for (const g of groupsToRegroup) {
+            try {
+                const newGroupId = await chrome.tabs.group({ tabIds: g.tabIds, createProperties: { windowId: newWin.id } });
+                if (chrome.tabGroups) await chrome.tabGroups.update(newGroupId, { title: g.title, color: g.color });
+            } catch(err) {}
+        }
+
         state.clearAllSelections();
         await API.fetchWindowsAndTabs();
         refreshUI();
     };
     
-    document.getElementById('mergeAllBtn').onclick = async () => {
-        const target = state.activeWindowId;
-        for (const w of state.windowsData) {
-            if (w.id !== target) await API.moveTabs(w.tabs.map(t=>t.id), target);
-        }
-        await API.fetchWindowsAndTabs();
-        refreshUI();
-    };
-
     const groupBtn = document.getElementById('groupBtn');
     const modal = document.getElementById('groupModalOverlay');
     const colorContainer = document.getElementById('colorPickerContainer');

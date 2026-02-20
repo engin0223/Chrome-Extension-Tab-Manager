@@ -137,7 +137,7 @@ export function attachDragHandlers(container, refreshCallback) {
     document.body.appendChild(dragState.ghost);
   };
 
-const handleMoveDrag = (e) => {
+  const handleMoveDrag = (e) => {
     globalDragWasActive = true;
     const { ghost, offset } = dragState;
 
@@ -204,8 +204,6 @@ const handleMoveDrag = (e) => {
 
       if (targetWin) {
         // A. CREATE THE "CLEAN LIST"
-        // This is the list of tabs as they will look AFTER we remove the dragged items
-        // but BEFORE we insert them in the new spot.
         const cleanTabs = targetWin.tabs.filter(t => !state.blueSelection.includes(t.id));
 
         // B. Find the target's index within this Clean List
@@ -213,7 +211,7 @@ const handleMoveDrag = (e) => {
         let cleanIndex = cleanTabs.findIndex(t => t.id === targetTabId);
 
         if (cleanIndex !== -1 || forceInsertAfter) {
-          // Geometry Check: Are we in the top half (insert before) or bottom half (insert after)?
+          // Geometry Check
           const rect = card.getBoundingClientRect();
           const midY = rect.top + (rect.height / 2);
           const isBottomHalf = e.clientY > midY;
@@ -221,7 +219,6 @@ const handleMoveDrag = (e) => {
           const shouldInsertAfter = forceInsertAfter || isBottomHalf;
 
           // C. CALCULATE FINAL INDEX
-          // NEW: If inserting after a split card, ensure we skip ALL its internal tabs!
           let tabsInTargetCard = 1;
           if (card.dataset.tabIds) {
              try { tabsInTargetCard = JSON.parse(card.dataset.tabIds).length; } catch(e) {}
@@ -274,7 +271,6 @@ const handleMoveDrag = (e) => {
       if (isIntersecting) {
         card.classList.add('selected-blue');
       } else if (isAdditive) {
-        // In additive mode, only deselect if it wasn't already selected before drag
         if (!state.blueSelection.includes(tabId)) card.classList.remove('selected-blue');
       } else {
         card.classList.remove('selected-blue');
@@ -305,19 +301,16 @@ const handleMoveDrag = (e) => {
 
     // 1. Handle Move Drop
     if (dragState.active) {
-      // --- FIX: Calculate offset based on DOM position before removing placeholder ---
       let blueTabsBeforePlaceholder = 0;
       if (dragState.placeholder) {
         let sibling = dragState.placeholder.previousElementSibling;
         while (sibling) {
-          // Check if sibling is a card and is part of the current blue selection
           if (sibling.classList.contains('page-card')) {
              const tId = Number(sibling.dataset.tabId);
              if (state.blueSelection.includes(tId)) {
-               // Count ALL tabs inside this card if it's a split view
                if (sibling.dataset.tabIds) {
                  try { blueTabsBeforePlaceholder += JSON.parse(sibling.dataset.tabIds).length; } 
-                 catch(e) { blueTabsBeforePlaceholder++; }
+                 catch(err) { blueTabsBeforePlaceholder++; }
                } else {
                  blueTabsBeforePlaceholder++;
                }
@@ -326,7 +319,6 @@ const handleMoveDrag = (e) => {
           sibling = sibling.previousElementSibling;
         }
       }
-      // -----------------------------------------------------------------------------
 
       dragState.active = false;
       if (dragState.ghost) { dragState.ghost.remove(); dragState.ghost = null; }
@@ -341,6 +333,50 @@ const handleMoveDrag = (e) => {
         if (el) el.style.display = '';
       });
 
+      // --- GROUP INTEGRITY LOGIC ---
+      const draggedGroups = {};
+      for (const win of state.windowsData) {
+          for (const t of win.tabs) {
+              if (dragState.sortedSelection.includes(t.id) && t.groupId > -1) {
+                  if (!draggedGroups[t.groupId]) draggedGroups[t.groupId] = [];
+                  draggedGroups[t.groupId].push(t.id);
+              }
+          }
+      }
+
+      const groupsToRegroup = [];
+      const tabsToUngroup = [];
+
+      for (const [groupIdStr, draggedTabIds] of Object.entries(draggedGroups)) {
+          const gId = Number(groupIdStr);
+          let totalTabsInGroup = 0;
+          let sourceWinId = null;
+          for (const win of state.windowsData) {
+              const groupTabs = win.tabs.filter(t => t.groupId === gId);
+              totalTabsInGroup += groupTabs.length;
+              if (groupTabs.length > 0) sourceWinId = win.id;
+          }
+
+          if (draggedTabIds.length === totalTabsInGroup) {
+              const gMeta = state.tabGroups.find(g => g.id === gId);
+              groupsToRegroup.push({
+                  sourceGroupId: gId,
+                  sourceWinId: sourceWinId,
+                  tabIds: draggedTabIds,
+                  color: gMeta ? gMeta.color : 'grey',
+                  title: gMeta ? gMeta.title : ''
+              });
+          } else {
+              tabsToUngroup.push(...draggedTabIds);
+          }
+      }
+
+      // Explicitly ungroup partial selections before moving so they don't corrupt the remaining group
+      if (tabsToUngroup.length > 0) {
+          try { await chrome.tabs.ungroup(tabsToUngroup); } catch(err){}
+      }
+      // -----------------------------
+
       // Determine drop action
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const isNewWindowDrop = el && el.closest('#newWindowBtn');
@@ -354,23 +390,28 @@ const handleMoveDrag = (e) => {
         state.blueSelection = [];
         container.querySelectorAll('.page-card.selected-blue').forEach(c => c.classList.remove('selected-blue'));
 
-        // 1. Create window with ONLY the FIRST tab
         const firstTabId = sortedSelection[0];
         const remainingTabs = sortedSelection.slice(1);
         
-        // Create window using just the first item
         const newWin = await createSplitWindow([firstTabId]);
         
         state.activeWindowId = newWin.id;
         state.searchTargetWindowIds = new Set([newWin.id]);
 
-        // 2. Move the remaining tabs one by one into that new window
         let targetIndex = 1;
-        
         for (const tabId of remainingTabs) {
           await moveTabs([tabId], newWin.id, targetIndex);
           targetIndex++; 
         }
+
+        // --- Regroup whole groups in the new window ---
+        for (const g of groupsToRegroup) {
+            try {
+                const newGroupId = await chrome.tabs.group({ tabIds: g.tabIds, createProperties: { windowId: newWin.id } });
+                await chrome.tabGroups.update(newGroupId, { title: g.title, color: g.color });
+            } catch(err) {}
+        }
+        // ----------------------------------------------
 
         await new Promise(r => setTimeout(r, 200)); 
         await fetchWindowsAndTabs();
@@ -382,11 +423,9 @@ const handleMoveDrag = (e) => {
         const card = el ? el.closest('.page-card') : null;
         const winBtn = el ? el.closest('.window-tab') : null;
 
-        // 1. Determine Target Window
         if (card) targetWinId = Number(card.dataset.windowId);
         else if (winBtn) targetWinId = Number(winBtn.dataset.windowId);
 
-        // 2. Determine Index
         let finalInsertIndex = dragState.insertIndex;
 
         if (winBtn && !card) {
@@ -408,11 +447,10 @@ const handleMoveDrag = (e) => {
              const targetWinData = state.windowsData.find(w => w.id === targetWinId);
              const currentIds = targetWinData.tabs.map(t => t.id);
              
-             // Identify all split tabs in this window (from DOM)
              const splitTabIds = new Set();
              container.querySelectorAll('.page-card.split-view-card').forEach(c => {
                if (Number(c.dataset.windowId) === targetWinId) {
-                 try { JSON.parse(c.dataset.tabIds).forEach(id => splitTabIds.add(id)); } catch(e){}
+                 try { JSON.parse(c.dataset.tabIds).forEach(id => splitTabIds.add(id)); } catch(err){}
                }
              });
 
@@ -428,35 +466,43 @@ const handleMoveDrag = (e) => {
                  let jumpDestIndex = 0;
                  
                  if (targetCleanIndex > originalCleanIndex) {
-                     // Dragging DOWN: move jumped tabs UP
                      jumpedTabs = cleanTabsIds.slice(originalCleanIndex, targetCleanIndex);
                      jumpDestIndex = firstSelIdx;
                  } else if (targetCleanIndex < originalCleanIndex) {
-                     // Dragging UP: move jumped tabs DOWN
                      jumpedTabs = cleanTabsIds.slice(targetCleanIndex, originalCleanIndex);
                      jumpDestIndex = lastSelIdx + 1;
                  }
 
-                 // Check if the dragged items OR the jumped items contain a split view
                  const selectionHasSplit = sortedSelection.some(id => splitTabIds.has(id));
                  const jumpedHasSplit = jumpedTabs.some(id => splitTabIds.has(id));
 
-                 // Decide which set to move to preserve split views
                  if (selectionHasSplit && !jumpedHasSplit && jumpedTabs.length > 0) {
-                     // Move the jumped normal tabs (Reverse-Move) to protect the dragged split tabs
                      await moveTabs(jumpedTabs, targetWinId, jumpDestIndex);
                  } else {
-                     // Standard Move: The dragged items are normal tabs, OR both sets have split tabs
                      await moveTabs(sortedSelection, targetWinId, targetAbsoluteIndex);
                  }
              } else {
-                 // Fallback for non-contiguous multi-selections
                  await moveTabs(sortedSelection, targetWinId, targetAbsoluteIndex);
              }
           } else {
              // --- CROSS WINDOW MOVE ---
              await moveTabs(sortedSelection, targetWinId, targetAbsoluteIndex);
           }
+
+          // --- Regroup whole groups after move ---
+          for (const g of groupsToRegroup) {
+              try {
+                  if (targetWinId !== g.sourceWinId) {
+                      // Moved to a different window, must recreate group
+                      const newGroupId = await chrome.tabs.group({ tabIds: g.tabIds, createProperties: { windowId: targetWinId } });
+                      await chrome.tabGroups.update(newGroupId, { title: g.title, color: g.color });
+                  } else {
+                      // Moved within the same window, enforce group boundaries
+                      await chrome.tabs.group({ tabIds: g.tabIds, groupId: g.sourceGroupId });
+                  }
+              } catch(err) {}
+          }
+          // ---------------------------------------
 
           setTimeout(() => {
             state.activeWindowId = targetWinId;
@@ -505,32 +551,22 @@ const handleMoveDrag = (e) => {
     if (card && state.moveTabsEnabled) {
       const tid = Number(card.dataset.tabId);
 
-      // CHANGE: Check if card is selected OR if Alt key is held
       const isSelected = state.blueSelection.includes(tid);
       const isAltDrag = e.altKey;
       const rect = card.getBoundingClientRect();
 
       if (isSelected || isAltDrag) {
-        
-        // If using Alt-Drag on an unselected item, select it immediately.
-        // This ensures createGhost and handleMoveDrag recognize the item.
         if (isAltDrag && !isSelected) {
-          // 1. Update State to singular selection
           state.blueSelection = [tid];
-
-          // 2. Update Visuals immediately (needed for createGhost to pick up the style)
           container.querySelectorAll('.page-card.selected-blue')
             .forEach(c => c.classList.remove('selected-blue'));
           card.classList.add('selected-blue');
-
-          // 3. Notify parent/store
           refreshCallback();
         }
 
         dragState.pending = true;
         dragState.start = { x: e.clientX, y: e.clientY };
         dragState.lastMouseX = e.clientX;
-        console.log("Drag Start:", dragState.start); 
         dragState.offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         
         e.preventDefault();
