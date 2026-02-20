@@ -18,6 +18,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. Initial Data Load
     await API.fetchWindowsAndTabs();
     
+    // --- ONE-TIME OBSERVER FOR FOCUSED TAB STYLING ---
+    state.addFocusObserver((newId) => {
+        // We use setTimeout to allow the current stack (like `refreshUI()`) to finish 
+        // updating the DOM before we attempt to style the element.
+        setTimeout(() => {
+            // Clear previous outlines
+            document.querySelectorAll('.page-card').forEach(c => {
+                c.style.outline = '';
+                c.style.outlineOffset = '';
+            });
+
+            // Apply focus outline and scroll into view
+            if (newId !== null) {
+                const newCard = document.querySelector(`.page-card[data-tab-id="${newId}"]`);
+                if (newCard) {
+                    newCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                    newCard.style.outline = '2px solid var(--text-primary)';
+                    newCard.style.outlineOffset = '-1px';
+                }
+            }
+        }, 0);
+    });
+
     // 3. Render Initial State
     refreshUI();
     
@@ -84,6 +107,121 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             state.blueSelection = [...new Set(newSelection)];
             refreshUI();
+        }
+
+        // Custom Navigation Logic for Arrow Keys & Tab (Page Cards)
+        const navKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'];
+        if (navKeys.includes(e.key)) {
+            // Let default behavior work inside input fields and renamable items
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+                return;
+            }
+
+            e.preventDefault(); // Stop native button traversal/scrolling
+
+            const cards = Array.from(document.querySelectorAll('.page-card'));
+            if (cards.length === 0) return;
+
+            // Find current focused index
+            let currentIndex = cards.findIndex(c => {
+                if (c.dataset.tabIds) {
+                    try { return JSON.parse(c.dataset.tabIds).includes(state.focusedTabId); } catch(err){}
+                }
+                return Number(c.dataset.tabId) === state.focusedTabId;
+            });
+
+            // Fallback starting position
+            if (currentIndex === -1) {
+                if (state.blueSelection.length > 0) {
+                    const lastSel = state.blueSelection[state.blueSelection.length - 1];
+                    currentIndex = cards.findIndex(c => {
+                        if (c.dataset.tabIds) {
+                            try { return JSON.parse(c.dataset.tabIds).includes(lastSel); } catch(err){}
+                        }
+                        return Number(c.dataset.tabId) === lastSel;
+                    });
+                }
+                if (currentIndex === -1) {
+                    currentIndex = 0;
+                    const firstCard = cards[0];
+                    if (firstCard.dataset.tabIds) {
+                        try { state.focusedTabId = JSON.parse(firstCard.dataset.tabIds)[0]; } catch(err){}
+                    } else {
+                        state.focusedTabId = Number(firstCard.dataset.tabId);
+                    }
+                }
+            } else {
+                let nextIndex = currentIndex;
+
+                // Calculate directional moves
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    nextIndex = currentIndex + 1;
+                    if (nextIndex >= cards.length) nextIndex = cards.length - 1; // Clamp to end
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    nextIndex = currentIndex - 1;
+                    if (nextIndex < 0) nextIndex = 0; // Clamp to start
+                } else if (e.key === 'Tab') {
+                    nextIndex = currentIndex + 1;
+                    if (nextIndex >= cards.length) nextIndex = 0; // Loop to start
+                }
+
+                const forceSelect = (state.blueSelection.length === 0);
+
+                // Trigger updates if we moved index or need initial forced selection
+                if (nextIndex !== currentIndex || forceSelect) {
+                    const targetCard = cards[nextIndex];
+                    let targetIds = [];
+                    if (targetCard.dataset.tabIds) {
+                        try { targetIds = JSON.parse(targetCard.dataset.tabIds); } catch(err){}
+                    } else {
+                        targetIds = [Number(targetCard.dataset.tabId)];
+                    }
+
+                    if (e.shiftKey) {
+                        // --- Range Selection Mode ---
+                        if (!state.shiftSelectionStartId) {
+                            state.shiftSelectionStartId = state.focusedTabId;
+                        }
+
+                        let anchorIndex = cards.findIndex(c => {
+                            if (c.dataset.tabIds) {
+                                try { return JSON.parse(c.dataset.tabIds).includes(state.shiftSelectionStartId); } catch(err){}
+                            }
+                            return Number(c.dataset.tabId) === state.shiftSelectionStartId;
+                        });
+
+                        // Safe fallback if anchor was somehow lost
+                        if (anchorIndex === -1) {
+                            anchorIndex = currentIndex;
+                            state.shiftSelectionStartId = state.focusedTabId;
+                        }
+
+                        const startIdx = Math.min(anchorIndex, nextIndex);
+                        const endIdx = Math.max(anchorIndex, nextIndex);
+
+                        let rangeSelection = [];
+                        for (let i = startIdx; i <= endIdx; i++) {
+                            const c = cards[i];
+                            if (c.dataset.tabIds) {
+                                try { rangeSelection.push(...JSON.parse(c.dataset.tabIds)); } catch(err){}
+                            } else {
+                                rangeSelection.push(Number(c.dataset.tabId));
+                            }
+                        }
+
+                        state.blueSelection = [...new Set(rangeSelection)];
+                    } else {
+                        // --- Normal Move: Solo Selection ---
+                        state.shiftSelectionStartId = null; // Clear anchor so next shift-click starts fresh
+                        state.blueSelection = [...targetIds];
+                    }
+
+                    // Simply updating focusedTabId will trigger our observer to apply styling
+                    state.focusedTabId = targetIds[0];
+
+                    refreshUI();
+                }
+            }
         }
     });
 
@@ -161,6 +299,7 @@ function setupContextMenu() {
 }
 
 function handleWindowTabClick(e, id) {
+    state.shiftSelectionStartId = null; // Reset shift anchor
     if (e.ctrlKey) {
         // Toggle selection logic for window tabs
         const win = state.windowsData.find(w => w.id === id);
@@ -181,6 +320,11 @@ function handleWindowTabClick(e, id) {
 function handleCardClick(e, tabIds) {
     if(!Array.isArray(tabIds)) tabIds = [tabIds];
     if (state.mergeMode) return; 
+
+    // Update keyboard cursor focus to synchronize with mouse click
+    // (This automatically triggers the observer)
+    state.focusedTabId = tabIds[0];
+    state.shiftSelectionStartId = null; // Reset shift anchor on mouse click
 
     if (e.ctrlKey || e.metaKey) {
         const allSelected = tabIds.every(id => state.blueSelection.includes(id));

@@ -21,6 +21,27 @@ class Store {
     
     // Flags
     this.moveTabsEnabled = false;
+
+    // Keyboard Navigation Tracker
+    this._focusedTabId = null; 
+    this.shiftSelectionStartId = null; // Tracks the anchor for Shift+Nav range selections
+    
+    // Observers
+    this.focusObservers = [];
+  }
+
+  // Set up Getter/Setter to automatically observe changes
+  get focusedTabId() {
+    return this._focusedTabId;
+  }
+
+  set focusedTabId(id) {
+    this._focusedTabId = id;
+    this.focusObservers.forEach(callback => callback(id));
+  }
+
+  addFocusObserver(callback) {
+    this.focusObservers.push(callback);
   }
 
   setWindows(data) {
@@ -45,6 +66,8 @@ class Store {
     this.redSelection = [];
     this.yellowSelection = [];
     this.mergeMode = null;
+    this.focusedTabId = null; // This will automatically trigger the observer to clear the styling
+    this.shiftSelectionStartId = null;
   }
 }
 
