@@ -118,7 +118,23 @@ export async function activateTab(windowId, tabId) {
 }
 
 export async function moveTabs(tabIds, targetWindowId, index = -1) {
-    await chrome.tabs.move(tabIds, { windowId: targetWindowId, index });
+    let finalIndex = index;
+    
+    if (index !== -1) {
+        const actualTabs = await chrome.tabs.query({ windowId: targetWindowId });
+        const extensionUrl = chrome.runtime.getURL('src/pages/ui/ui.html');
+        
+        // Find the physical index of the single UI tab
+        const uiTabIndex = actualTabs.findIndex(t => t.url === extensionUrl);
+        
+        // If the UI tab is in this window and sits before or at our 
+        // intended visual insertion point, shift the physical index by 1.
+        if (uiTabIndex !== -1 && uiTabIndex <= index) {
+            finalIndex = index + 1;
+        }
+    }
+
+    await chrome.tabs.move(tabIds, { windowId: targetWindowId, index: finalIndex });
 }
 
 export async function createSplitWindow(tabIds) {
