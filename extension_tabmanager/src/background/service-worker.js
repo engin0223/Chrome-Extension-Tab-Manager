@@ -157,7 +157,12 @@ if (chrome.tabGroups) {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if ((changeInfo.status === 'complete' || changeInfo.title || changeInfo.url) && tab.groupId > -1) {
+    // If a tab is added/removed from a group natively (groupId changes state)
+    if (changeInfo.groupId !== undefined) {
+        syncAllOpenGroups(); 
+    } 
+    // If the tab itself just finished loading and is in a group
+    else if ((changeInfo.status === 'complete' || changeInfo.title || changeInfo.url) && tab.groupId > -1) {
         autoSaveGroup(tab.groupId);
     }
 });
@@ -170,12 +175,22 @@ chrome.tabs.onAttached.addListener((tabId, attachInfo) => {
     chrome.tabs.get(tabId, (tab) => {
         if (tab && tab.groupId > -1) autoSaveGroup(tab.groupId);
     });
+    syncAllOpenGroups(); // Catch cross-window group changes
+});
+
+chrome.tabs.onDetached.addListener((tabId, detachInfo) => {
+    syncAllOpenGroups(); // Catch tab leaving a window/group
 });
 
 chrome.tabs.onMoved.addListener((tabId, moveInfo) => {
      chrome.tabs.get(tabId, (tab) => {
         if (tab && tab.groupId > -1) autoSaveGroup(tab.groupId);
     });
+});
+
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    // If a tab is closed, any group it belonged to gets updated
+    syncAllOpenGroups();
 });
 
 syncAllOpenGroups();
