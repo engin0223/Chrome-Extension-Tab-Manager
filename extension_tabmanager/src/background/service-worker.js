@@ -26,7 +26,6 @@ async function getTabsInGroup(groupId) {
 function findMatchingSavedGroup(groupMeta, tabs, savedGroups, groupMappings) {
     const activeSavedIds = new Set(Object.values(groupMappings));
     const currentTitle = groupMeta.title || 'Untitled Group';
-    const currentUrls = tabs.map(t => t.url);
 
     return savedGroups.find(saved => {
         // 1. Skip if this saved group is already open elsewhere (mapped)
