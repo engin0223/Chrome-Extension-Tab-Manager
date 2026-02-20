@@ -11,6 +11,7 @@ A powerful, lightweight Chrome extension to help organize, merge, split, and sav
 - **Drag & Drop**:
   - **Marquee Selection**: Drag to select multiple tabs.
   - **Reorder & Move**: Drag tabs to reorder them or move them between windows (Enable in Options).
+- **Keyboard Navigation**: Full support for traversing and selecting tabs using Arrow keys, Tab, Shift-selection, and quick-action shortcuts.
 - **Context Menus**: Right-click on groups for quick actions like "Move to New Window", "Ungroup", or "Delete".
 - **Theme Support**: Built-in Dark and Light modes.
 
@@ -31,22 +32,27 @@ A powerful, lightweight Chrome extension to help organize, merge, split, and sav
 
 ## Usage Guide
 
-Click the extension icon to open the main dashboard (`ui.html`).
+Click the extension icon to open the main dashboard.
 
 ### 1. The Sidebar (Sessions & Groups)
-Access saved content by toggling the sidebar button (top-left).
+Access saved content by clicking the **Sessions** button in the top toolbar.
 - **Saved Groups**:
-  - Automatically tracks open groups.
-  - Click "Save Current" to snapshot your current windows as a Session.
+  - Automatically tracks open groups. Open groups are automatically synced to storage to prevent data loss.
   - **Restore**: Click the restore icon next to a group or session to open it.
-  - **Auto-Sync**: Open groups are automatically synced to storage to prevent data loss.
+  - **Rename**: Click on the title of any saved session or group to rename it inline.
+- **Window Sessions**:
+  - Click "Save Current" to snapshot your current windows as a Session.
 
 ### 2. Main Dashboard (Windows & Tabs)
-- **Selection**:
+- **Selection & Navigation**:
     - **Click**: Select a single tab.
     - **Ctrl/Cmd + Click**: Add/remove individual tabs from selection.
     - **Marquee (Drag)**: Click and drag in empty space to select multiple tabs at once.
-    - **Ctrl + A**: Select all tabs.
+    - **Keyboard Arrows / Tab**: Move focus between tab cards.
+    - **Shift + Arrows**: Select a range of tabs sequentially.
+    - **Ctrl/Cmd + A**: Select all tabs in the active view.
+    - **Escape**: Clear current selection and close context menus/modals.
+    - **Delete**: Close the currently selected tabs.
 - **Window Management**:
     - **Rename**: Click a window's title tab at the top to rename it.
     - **Switch**: Click a window tab to view its contents.
@@ -69,14 +75,15 @@ Access saved content by toggling the sidebar button (top-left).
 - **Right-click** on a tab group or split-view card to access specific actions:
     - New tab in group
     - Move group to new window
+    - Close group
     - Ungroup
-    - Close/Delete group
+    - Delete group (from saved storage)
 
 ---
 
 ## Configuration & Options
 Right-click the extension icon in the toolbar and select **Options**.
-- **Enable Drag-and-Drop Move**: Allows you to physically drag selected tabs to different windows or reorder them within the list.
+- **Enable Drag-and-Drop Move**: Allows you to physically drag selected tabs to different windows or reorder them within the list (Experimental feature).
 
 ---
 
@@ -86,13 +93,14 @@ This extension uses a modular JavaScript architecture.
 
 - `manifest.json`: Configuration and permissions.
 - `src/background/`:
-  - `service-worker.js`: Handles background events and opens the main UI.
+  - `service-worker.js`: Handles background events, auto-saves tab groups, and opens the main UI.
 - `src/modules/`: Core logic libraries.
   - `api.js`: Wrappers for Chrome APIs (Windows, Tabs, Groups).
   - `store.js`: Central state management.
   - `session-manager.js`: Logic for saving/restoring sessions and groups.
   - `drag-drop.js`: Drag-and-drop interaction logic.
   - `ui-renderer.js`: Generates the HTML for cards and lists.
+  - `utils.js`: Utility functions (intersection checks, debouncing).
 - `src/pages/`:
   - `ui/`: Main dashboard files (`ui.html`, `main.js`).
   - `options/`: Settings page.
