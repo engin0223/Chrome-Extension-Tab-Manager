@@ -12,7 +12,20 @@ export async function fetchWindowsAndTabs() {
         state.setTabGroups(groups);
     }
 
-    const windows = await chrome.windows.getAll({ populate: true });
+    let windows = await chrome.windows.getAll({ populate: true });
+    
+    // --- NEW: Filter out the UI tab ---
+    const extensionUrl = chrome.runtime.getURL('src/pages/ui/ui.html');
+    windows.forEach(w => {
+      if (w.tabs) {
+        w.tabs = w.tabs.filter(t => t.url !== extensionUrl);
+      }
+    });
+    
+    // Remove any windows that have no tabs (e.g. just the UI window)
+    windows = windows.filter(w => w.tabs && w.tabs.length > 0);
+    // ----------------------------------------------------
+
     const sorted = windows.sort((a, b) => a.id - b.id);
 
     // Load saved names
